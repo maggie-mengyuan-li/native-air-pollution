@@ -1,0 +1,2811 @@
+---
+title: "Native_Air_Pollution_Project_Code"
+author: "Maggie Li (ml4424)"
+date: "6/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+####Load packages
+```{r}
+library(dplyr)
+library(tidyverse)
+library(stringr)
+library(tidycensus)
+require(RColorBrewer); require(ggplot2)
+require(mapdata); require(maptools)
+library(raster)
+library(choroplethr)
+library(choroplethrMaps)
+library(viridis)
+library(rgdal)
+library(ggmap)
+library(sp)
+require("plyr"); require(dplyr)
+library(tgp)
+library(mgcv)
+library(gstat)
+library(automap)
+library(raster) 
+library(dismo)
+library(reshape)
+library(reshape2)
+library(leaflet); library(rgeos)
+library(leaflet.extras)
+library(rgdal)
+library(mapview); library(webshot)
+class(USAboundaries::us_counties)
+library(USAboundaries)
+library(ggplot2)
+library(maps)
+library(sf)
+library(tmap)
+library(tmap)
+library(naniar)
+library(utils)
+library(readr)
+library(tigris)
+library(acs)
+library(ncdf4)
+library(raster)
+library(rasterVis)
+require(usmap)
+require(tictoc)
+require(stats)
+require(foreign)
+require(MASS)
+require(lme4)
+library(stargazer)
+library(xtable)
+library(texreg)
+library(stargazer)
+library(ggpubr)
+library(grid)
+```
+#PART 1: DATA CLEANING (MONITOR & MODEL)
+##1.1 Monitor Data
+###Read in and clean EPA 
+
+I downloaded these here: https://aqs.epa.gov/aqsweb/airdata/download_files.html
+
+I've included them in the data folder as csv files since they were a bit of a hassle to clean from their OG .txt file format, but you can try to download them from the source and check!
+
+```{r}
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/EPA_data_1999_2018")
+annual_conc_by_monitor_1999 <- read.csv("annual_conc_by_monitor_1999.csv")
+annual_conc_by_monitor_2000 <- read.csv("annual_conc_by_monitor_2000.csv")
+annual_conc_by_monitor_2001 <- read.csv("annual_conc_by_monitor_2001.csv")
+annual_conc_by_monitor_2002 <- read.csv("annual_conc_by_monitor_2002.csv")
+annual_conc_by_monitor_2003 <- read.csv("annual_conc_by_monitor_2003.csv")
+annual_conc_by_monitor_2004 <- read.csv("annual_conc_by_monitor_2004.csv")
+annual_conc_by_monitor_2005 <- read.csv("annual_conc_by_monitor_2005.csv")
+annual_conc_by_monitor_2006 <- read.csv("annual_conc_by_monitor_2006.csv")
+annual_conc_by_monitor_2007 <- read.csv("annual_conc_by_monitor_2007.csv")
+annual_conc_by_monitor_2008 <- read.csv("annual_conc_by_monitor_2008.csv")
+annual_conc_by_monitor_2009 <- read.csv("annual_conc_by_monitor_2009.csv")
+annual_conc_by_monitor_2010 <- read.csv("annual_conc_by_monitor_2010.csv")
+annual_conc_by_monitor_2011 <- read.csv("annual_conc_by_monitor_2011.csv")
+annual_conc_by_monitor_2012 <- read.csv("annual_conc_by_monitor_2012.csv")
+annual_conc_by_monitor_2013 <- read.csv("annual_conc_by_monitor_2013.csv")
+annual_conc_by_monitor_2014 <- read.csv("annual_conc_by_monitor_2014.csv")
+annual_conc_by_monitor_2015 <- read.csv("annual_conc_by_monitor_2015.csv")
+annual_conc_by_monitor_2016 <- read.csv("annual_conc_by_monitor_2016.csv")
+annual_conc_by_monitor_2017 <- read.csv("annual_conc_by_monitor_2017.csv")
+annual_conc_by_monitor_2018 <- read.csv("annual_conc_by_monitor_2018.csv")
+```
+###Filter out EPA PM2.5 Annual Data
+####Make list of all tables to iterate through
+```{r}
+all_epa_tables <-list(annual_conc_by_monitor_2000,
+                      annual_conc_by_monitor_2001,
+                      annual_conc_by_monitor_2002,
+                      annual_conc_by_monitor_2003,
+                      annual_conc_by_monitor_2004,
+                      annual_conc_by_monitor_2005,
+                      annual_conc_by_monitor_2006,
+                      annual_conc_by_monitor_2007,
+                      annual_conc_by_monitor_2008,
+                      annual_conc_by_monitor_2009,
+                      annual_conc_by_monitor_2010,
+                      annual_conc_by_monitor_2011,
+                      annual_conc_by_monitor_2012,
+                      annual_conc_by_monitor_2013,
+                      annual_conc_by_monitor_2014,
+                      annual_conc_by_monitor_2015,
+                      annual_conc_by_monitor_2016,
+                      annual_conc_by_monitor_2017,
+                      annual_conc_by_monitor_2018)
+
+#empty list to put cleaned data into
+cleaned_list <-list()
+#assign count variable to iterate through data of years
+year <- 1
+for (i in 1:length(all_epa_tables)){
+  cleaned_list[[year]]<- filter(all_epa_tables[[i]], 
+                                Pollutant.Standard == "PM25 24-hour 2012")
+  year <- year + 1
+}
+view(annual_conc_by_monitor_2012 %>% filter(Pollutant.Standard == "PM25 24-hour 2012"))
+#cleaned_list contains list items 1-20, corresponding to years 1999-2018. Rows in each table correspond to specific monitor's annual aggregated PM2.5 measurement.
+```
+####For loop to iterate through all the tables; POC = 1, at least 75% observations for that year, and select for no events or events excluded monitors (at least for now)
+```{r}
+
+for (year in 1:19){
+  cleaned_list[[year]]$State.Code <- as.integer(as.character(cleaned_list[[year]]$State.Code))
+  county_cleaned <- formatC(cleaned_list[[year]]$County.Code, width = 3, format = "d", flag = "0")
+  state_cleaned <- formatC(cleaned_list[[year]]$State.Code, width = 2, format = "d", flag = "0")
+  cleaned_list[[year]] <- cbind(cleaned_list[[year]],
+                                state_cleaned)
+  cleaned_list[[year]] <- cbind(cleaned_list[[year]],
+                                county_cleaned)
+  cleaned_list[[year]] <- unite(data=cleaned_list[[year]],
+                                "County",
+                                sep = "",
+                                c(state_cleaned, county_cleaned),
+                                remove = FALSE)
+  cleaned_list[[year]]$obs_percent <- cleaned_list[[year]]$Valid.Day.Count/cleaned_list[[year]]$Required.Day.Count
+  cleaned_list[[year]] <- filter(cleaned_list[[year]],
+                                POC == 1,
+                                obs_percent >= 0.75,
+                                Event.Type == "No Events" | Event.Type == "Events Excluded") #make sure not to double count monitors because we restrict to POC == 1
+}
+```
+
+###Read in & clean IMPROVE rural network data
+
+IMPROVE Monitoring Network data downloaded from here: http://views.cira.colostate.edu/fed/QueryWizard/Default.aspx 
+I selected EPA PM2.5 MASS FRM (88101) Daily, 2000-2018, and clipped it (PM2_5_1999_2018_rural_clipped.txt). I forgot to download the data the first time with geolocation information so the second imported dataset (IMPROVE_location_tbl) has the lat/lon coordinates, which I joined to the first dataset.
+
+```{r}
+PM2_5_1999_2018_rural_clipped<-read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/PM2_5_1999_2018_rural_clipped.txt", sep="")
+#Aggregate daily to annual data
+#Step 1: only keep the year in the date columns, to make it easier to aggregate
+
+#1a: create character vector 'year', to add to data table as a separate column; taking the last 4 characters of the date for the year
+year <- str_sub(PM2_5_1999_2018_rural_clipped$Date, -4)
+#1b: paste character vector year into datatable
+PM2_5_1999_2018_rural_clipped$Year <- paste0(year)
+#1c: replace -999 with NAs
+#PM2_5_1999_2018_rural_clipped <- PM2_5_1999_2018_rural_clipped  %>% 
+#  replace_with_na(replace = list(MF.Value = -999))
+PM2_5_1999_2018_rural_clipped$MF.Value <- replace(PM2_5_1999_2018_rural_clipped$MF.Value, 
+                                                  which(PM2_5_1999_2018_rural_clipped$MF.Value < 0), NA)
+filter(PM2_5_1999_2018_rural_clipped,
+       is.na(MF.Value))
+#convert date column from factor to date format
+PM2_5_1999_2018_rural_clipped$Date <- as.Date(PM2_5_1999_2018_rural_clipped$Date,
+                                              "%m/%d/%Y")
+PM2_5_1999_2018_rural_clipped <- subset.data.frame(PM2_5_1999_2018_rural_clipped,
+                                                   POC == 1)
+#new column of days between dates
+IMPROVE_interval <- PM2_5_1999_2018_rural_clipped %>% mutate(Between=as.numeric(c(diff(Date),0)))
+#aggregate each SiteCode and Year by median days between
+IMPROVE_interval <- aggregate(Between ~ SiteCode + Year,
+                                    data = IMPROVE_interval,
+                                    FUN = median) 
+IMPROVE_interval
+IMPROVE_interval <- IMPROVE_interval %>% subset(select = c(SiteCode,
+                                                           Year,
+                                                           Between))
+#Compare IMPROVE_interval to number of total observations in each year
+IMPROVE_monitor_observations <- PM2_5_1999_2018_rural_clipped %>%
+	group_by(SiteCode, Year) %>%
+	dplyr::summarise(num_obs = n()) 
+
+#merge the two tables and compare interval with total observations for each monitor and year respectively
+#need to make a new column in both that combines monitor name with year as an ID
+IMPROVE_monitor_observations$ID <- paste(IMPROVE_monitor_observations$SiteCode,
+                                         IMPROVE_monitor_observations$Year)
+IMPROVE_interval$ID <- paste(IMPROVE_interval$SiteCode,
+                             IMPROVE_interval$Year)
+
+IMPROVE_check_interval <- merge(IMPROVE_monitor_observations,
+                                IMPROVE_interval,
+                                by = "ID")
+#create column with number of days expected (365/Between multiplied by 0.75), to compare with observed
+IMPROVE_check_interval$exp_obs <- paste(0.75*365/IMPROVE_check_interval$Between)
+IMPROVE_check_interval$exp_obs <- as.integer(IMPROVE_check_interval$exp_obs)
+
+#filter for values that meet 75% of observed threshold
+IMPROVE_filtered <- IMPROVE_check_interval %>% filter(num_obs > exp_obs)
+
+#Now join this cleaned list of monitors that meet threshold with original data, which we aggregate first
+#also need to make ID column for original data to join on
+#seems like aggregate gets rid of NA values automatically and some MF.Value rows are all NAs for certain monitors in certain years
+PM2_5_1999_2018_rural_clipped
+PM25_rural_annual = aggregate(MF.Value~SiteCode+Year,
+                              data = PM2_5_1999_2018_rural_clipped,
+                              FUN = mean)
+PM25_rural_annual
+PM25_rural_annual$ID <- paste(PM25_rural_annual$SiteCode,
+                              PM25_rural_annual$Year)
+
+PM25_rural_annual <- merge(PM25_rural_annual,
+                           IMPROVE_filtered,
+                           by = "ID")
+#keep only necessary columns of monitor name, year, and recorded values
+PM25_rural_annual <- subset(PM25_rural_annual,
+                            select = c(SiteCode, Year, MF.Value))
+ 
+#Join with geolocation table to have lat/lon, COUNTY
+
+# July 7 Note: I was dumb and didn't download the data above with Lat/Long coordinates. So I had to re-download it and join the two datasets.
+
+IMPROVE_location_tbl <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/IMPROVE_location_tbl.csv")
+IMPROVE_lat_lon <- subset(IMPROVE_location_tbl,
+                          select = c(2,6,8,9))
+#Rename column Code to SiteCode to match other table
+colnames(IMPROVE_lat_lon)[colnames(IMPROVE_lat_lon)=="Code"] <- "SiteCode"
+#IMPROVE_lat_lon
+
+#Join Tables (final IMPROVE table)
+PM25_rural_locations <- merge(x=PM25_rural_annual,
+                              y=IMPROVE_lat_lon,
+                              by = "SiteCode")
+#Note: values range from 1-25 micrograms per meter cubed
+
+#Manually geocode missing county FIPS values, exclude non-US monitors
+PM25_rural_locations <- PM25_rural_locations %>% 
+  mutate(County = replace(County, 
+                          SiteCode=='MAKA2',
+                          "53009")) %>% 
+  mutate(County = replace(County, 
+                          SiteCode=='MAKA1',
+                          "53009")) %>% 
+  mutate(County = replace(County, 
+                          SiteCode=='LOND1',
+                          "33015")) %>% 
+  mutate(County = replace(County, 
+                          SiteCode=='LASU2',
+                          "19177")) %>% 
+  mutate(County = replace(County, 
+                          SiteCode=='HACR1',
+                          "15009")) %>%
+  filter(SiteCode != "EGBE1",
+         SiteCode!= "BYIS1",
+         SiteCode!= "BALA1")
+
+#Add leading zero so that Counties have 5 characters total
+PM25_rural_locations$County <- as.integer(PM25_rural_locations$County) #convert to integer
+county_cleaned <- formatC(PM25_rural_locations$County, width = 5, format = "d", flag = "0")
+typeof(county_cleaned)
+PM25_rural_locations <- cbind(PM25_rural_locations,
+                              county_cleaned)
+PM25_rural_locations
+PM25_rural_locations <- PM25_rural_locations %>% filter(Year != "1999") %>% 
+  filter(!str_detect(county_cleaned, "^02")) %>%
+  filter(!str_detect(county_cleaned, "^15"))
+view(PM25_rural_locations)
+```
+###Monitor PM2.5 table for all years 1999-2018 (join EPA + IMPROVE)
+```{r}
+#Make a list to store IMPROVE tables by year
+IMPROVE_list <- list()
+IMPROVE_years <- c(2000:2018)
+year <- 1 
+
+for (i in 1:length(IMPROVE_years)){
+  IMPROVE_list[[year]] <- subset(PM25_rural_locations, 
+                                 Year == IMPROVE_years[i],
+                                 select = c(-SiteCode,-County))
+  colnames(IMPROVE_list[[year]])[colnames(IMPROVE_list[[year]])=="MF.Value"] <- "annual_mean"
+  colnames(IMPROVE_list[[year]])[colnames(IMPROVE_list[[year]])=="county_cleaned"] <- "County"
+  year <- year + 1
+}
+
+#Do the same for EPA tables
+EPA_list <- list()
+county_cleaned <- list()
+EPA_years <- c(2000:2018)
+#start at 2 since we are excluding 1999
+for (year in 1:length(EPA_years)){
+  EPA_list[[year]] <- data.frame(Year = cleaned_list[[year]]$Year,
+                                 annual_mean = cleaned_list[[year]]$Arithmetic.Mean,
+                                 Latitude = cleaned_list[[year]]$Latitude,
+                                 Longitude = cleaned_list[[year]]$Longitude,
+                                 County = cleaned_list[[year]]$County)
+}
+
+#Combine EPA and IMPROVE tables for all years
+PM25_all <- list()
+for (year in 1:19){
+  PM25_all[[year]] <- rbind(IMPROVE_list[[year]],
+                            EPA_list[[year]])
+}
+PM25_all
+```
+
+##1.2 Model data
+###*Optional* Reading in model data from source as raster, extracting values at the county level for all US counties 
+
+This is the part that takes forever to run, you can download all the years' ncdf files from the website and read them in via a loop or one by one (takes about 1-2 hours to run each), and extract county level model PM2.5 using code in this chunk. Tt's commented out because you can skip this and just directly import csv files I've provided, which are the outputs from this.
+
+I've put one ncdf downloaded from the source for 2008 if you want to try running the code, and see if it matches up with my csv file!
+
+```{r}
+# Source: Randall Martin's PM2.5 Model http://fizz.phys.dal.ca/~atmos/martin/?page_id=140
+
+# #all counties shapefile
+# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/cb_2018_us_county_500k")
+# counties_shp <- "cb_2018_us_county_500k.shp"
+# all_counties <- st_read(counties_shp, stringsAsFactors = FALSE)
+# 
+# #group all_counties by state fips, exclude territories and hawaii and alaska
+# all_counties <- all_counties %>% arrange(STATEFP) %>%
+#   filter(STATEFP != "02",
+#          STATEFP != "15")
+# unique(all_counties$STATEFP)
+# #create state fips key vector
+# state_fips <- fips(state.name, county = c())
+# 
+# #remove hawaii and alaska (FIPS are 15 and 02)
+# state_fips <- state_fips[!(state_fips %in% c("02","15"))]
+# 
+# #save each state's counties as separate sf's, in a list. the function below will iterate through all of these states.
+# state_list <- list(length(state_fips))
+# for (i in 1:length(state_fips)){
+#   state_list[[i]] <- all_counties %>%
+#     filter(STATEFP==state_fips[i])
+# }
+# 
+# # read in ncdf as raster stack for example year: 2008
+# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/model_PM25")
+# model_PM25_2008 <- raster("GWRwSPEC_PM25_NA_200801_200812-RH35.nc")
+# model_PM25_2008 <- stack(model_PM25_2008)
+# 
+# # Make empty list to store model data, iterate through 48 states to extract mean PM2.5 concentrations
+# model_PM25_2008_counties <-list()
+# 
+# # function to extract values from raster into counties shapefile
+# extract_model <- function(list, nc, state_list, state_fips){ 
+#    list[[i]] <- raster::extract(nc, state_list[[i]], 
+#                                 fun=mean, na.rm=TRUE, df=TRUE) #specify function = mean to extract mean concentrations
+#    list[[i]]$County <- state_list[[i]]$COUNTYFP
+#    list[[i]]$State <- state_fips[i]
+#    list[[i]]$FIPS <- paste(list[[i]]$State,list[[i]]$County)
+#    list[[i]]$FIPS <- str_replace_all(list[[i]]$FIPS, " ", "")
+# }
+# extract_model(model_PM25_2008_counties,
+#               model_PM25_2008, state_list, state_fips) #state_list and state_fips are already a list and vector created above
+```
+
+###Read in county model PM2.5 data
+```{r}
+#Read in model data into list of length 19 (# study years)
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/model_PM25")
+model_PM25 <- list()
+yr = 2000
+for (i in 1:19){
+  model_PM25[[i]] <- read_csv(file = paste('model_PM25_', yr, '.csv', sep = ''))
+  model_PM25[[i]] <- model_PM25[[i]] %>% dplyr::select(c(FIPS, PM25, State))
+  model_PM25[[i]]$Year <- yr
+  yr <- yr + 1
+}
+model_PM25
+```
+
+#PART 2: ASSIGN EXPOSURE/COVARIATES/OUTCOME TO COUNTIES
+
+"Exposure" of interest = American Indian (AI) populated county (Y/N)
+Outcome = PM2.5 concentration (monitor), PM2.5 concentration (model), PM2.5 coverage (monitor)
+
+##2.1 Define AI Populated Counties using the 3 classification definitions
+###2.1.1 Define Rural Cluster (Wallace et al.) Counties, extract PM2.5 values for sensitivity analysis
+```{r}
+# Read in county data for rural clusters & extract PM2.5 data
+counties_cluster <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/clustershare.csv")
+native_rural_counties <- subset.data.frame(counties_cluster,
+                                           cluster.name =="Rural, American Indian")
+
+#need matching County column name with PM2.5 data 
+County <- formatC(native_rural_counties$FIPS, width = 5, format = "d", flag = "0")
+
+#add County column (updated FIPS code)
+native_rural_counties <- cbind(native_rural_counties,
+                               County)
+native_rural_counties
+#filter only to 48 states and DC
+native_rural_counties <- native_rural_counties %>% 
+  filter(!str_detect(County, "^02")) %>%
+  filter(!str_detect(County, "^15"))
+native_rural_counties
+```
+
+###2.1.2 Define Census >5% AI Counties
+```{r}
+#Read in and define native counties by census definition, extract PM2.5 concentrations
+#Select native american counties using tidycensus: cutoff with census data of native americans > 5% of county population
+census_api_key("ef9bc9f1392567620517b2f5ba86c86ebbd70d69", overwrite=TRUE, install = TRUE)
+readRenviron("~/.Renviron")
+
+#Total!!American Indian and Alaska Native alone = P003004; total population is P001001
+native_pop_var <- "P003004"
+total_pop <- "P001001"
+native_census <- get_decennial(geography = "county", 
+                               variables = native_pop_var, 
+                               year = 2010)
+native_census
+native_census$total_pop <- get_decennial(geography = "county",
+                                         variables = total_pop, 
+                                         year = 2010)$value
+colnames(native_census)[colnames(native_census)=="value"] <- "native_pop"
+native_census$native_prop <- native_census$native_pop/native_census$total_pop
+native_census
+
+#Find counties with >5% native population; there are 203 counties.
+native_census_counties <- subset.data.frame(native_census,
+                                   native_prop >= 0.05)
+native_census_counties <- subset(native_census_counties,
+                                 select = c("GEOID", "NAME","native_prop"))
+colnames(native_census_counties)[colnames(native_census_counties)=="GEOID"] <- "County"
+native_census_counties <- native_census_counties %>% 
+  filter(!str_detect(County, "^02")) %>%
+  filter(!str_detect(County, "^15"))
+native_census_counties
+```
+
+###2.1.3 Define Reservation Counties
+```{r}
+# Read in gdb of recognized reservations 
+# Source: https://edg.epa.gov/metadata/catalog/search/resource/details.page?uuid=%7B8077CD55-74FB-4107-8047-3DEC0D55966A%7D
+tribal.gdb <- "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/Tribal_Boundaries_022117.gdb"
+tribal.gdb
+
+# List all feature classes in a file geodatabase
+fc_list <- ogrListLayers(tribal.gdb)
+print(fc_list)
+
+# Read the feature class
+tribal48 <- readOGR(dsn=tribal.gdb,layer="LOWER48_TRIBES")
+summary(tribal48)
+
+# Read out shapefile, to use in QGIS to find 20% overlap (commented out)
+# writeOGR(obj = tribal48, 
+#          dsn = "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/tribal48",
+#          layer = "tribal48", driver = "ESRI Shapefile")
+
+# Do some magic in QGIS: I imported the tribal48 shapefile and the county shapefile, used the overlap function to join the layers (input layer = counties), which spits out a temporary layer showing the percent overlap of reservations in each county, for each county in the attribute table (I believe the column is called overlap_pc. I went into the properties of this layer, filtered out those with overlap_pc >= 20%, and exported this as a shapefile. I then read this in below:
+
+# Read in cleaned counties with >= 20% area covered by reservation lands 
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+reservation_counties <- rgdal::readOGR("tribal48/tribal20_counties.shp")
+typeof(reservation_counties$GEOID)
+
+# visualize these counties in a simple map
+overlap_counties <- leaflet() %>%
+addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(data = reservation_counties, color = "#3DACF0")
+overlap_counties 
+
+# convert reservation counties spdf to dataframe
+reservation_counties <- as.data.frame(reservation_counties)
+reservation_counties <- reservation_counties %>% dplyr::select(GEOID) %>% dplyr::rename(County = GEOID)
+reservation_counties
+```
+
+## 2.2 Define potential covariates of interest (Rural/Urban Classification, Population Density, Climate Zone, Median HH Income)
+```{r}
+# Rural/Urban Classification: downloaded from CDC NCHS https://www.cdc.gov/nchs/data_access/urban_rural.htm
+# Key: 1 = large central metro; 2 = large fringe metro; 3 = medium metro; 4 = small metro; 5 = micropolitan (population of at least 10,000 but less than 50,000); 6 = non-core
+# Basically 1-3 is urban, 4-6 is suburban/rural
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+urban_rural_counties_2013 <- read.csv("urban_rural_counties_2013.csv")
+#add leading 0; first make column vector
+County <- formatC(urban_rural_counties_2013$FIPS.code, width = 5, format = "d", flag = "0")
+#append new County column vector
+urban_rural_counties_2013$County <- County
+urban_rural_counties_2013 <- urban_rural_counties_2013 %>%
+  dplyr::select(c(County, X2013.code)) %>% dplyr::rename(land_use = X2013.code)
+urban_rural_counties_2013$County <- as.factor(urban_rural_counties_2013$County)
+urban_rural_counties_2013$land_use <- as.factor(urban_rural_counties_2013$land_use)
+
+# Population Density Data; downloaded from US Census 
+census_pop_density <- read.csv("census_2010_pop_density.csv")
+head(census_pop_density)
+
+#keep columns GCT_STUB.target.geo.id2, HD01, SUBHD0401, SUBHD0402 (population and housing density)
+census_pop_density <- census_pop_density %>% subset(select = c(GCT_STUB.target.geo.id2,
+                                                               HD01,
+                                                               SUBHD0401, 
+                                                               SUBHD0402))
+#delete first three rows
+census_pop_density <- census_pop_density[-c(1,2,3),]
+census_pop_density <- census_pop_density %>% 
+  dplyr::rename(County = GCT_STUB.target.geo.id2) %>%
+  dplyr::rename(total_pop = HD01) %>%
+  dplyr::rename(pop_density = SUBHD0401) %>%
+  dplyr::rename(housing_density = SUBHD0402)
+
+census_pop_density$County <- as.numeric(as.character(census_pop_density$County))
+census_pop_density <- census_pop_density %>%
+  filter(County <= 56045) %>% 
+  filter(County > 1000)  #filter out territories
+census_pop_density 
+# clean county column by adding leading zero
+county_cleaned <- formatC(census_pop_density$County, width = 5, format = "d", flag = "0")
+
+census_pop_density <- cbind(census_pop_density, county_cleaned) %>%
+  dplyr::select(-County)
+
+census_pop_density$county_cleaned<- as.factor(census_pop_density$county_cleaned) 
+census_pop_density <- census_pop_density%>%dplyr::rename(County = county_cleaned)
+
+census_pop_density
+
+# Median HH Income from 2010 ACS
+hh_income <- "B19013_001"
+hh_income_census <- get_acs(geography = "county",
+                          variables = hh_income,
+                          year = 2010)
+hh_income_census <- hh_income_census %>%
+  dplyr::select(c(GEOID, estimate)) %>%
+  dplyr::rename(hh_income = estimate) %>%
+  dplyr::rename(County = GEOID)
+hh_income_census
+
+#Climate Zone data source: https://www.ncdc.noaa.gov/monitoring-references/maps/us-climate-regions.php?hc_location=ufi
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+climatezonefips <- read.csv("climatezonefips.csv")
+climatezonefips
+climatezonefips$FIPS <- as.numeric(climatezonefips$FIPS)
+climatezonefips <- subset(climatezonefips,
+                          select = c(Climate_Zone, FIPS))
+climatezonefips <- dplyr::rename(climatezonefips,
+                          State = FIPS)
+climatezonefips
+
+#EPA Regions : https://www.epa.gov/aboutepa/visiting-regional-office
+
+eparegions <- read.csv("eparegions.csv")
+eparegions <- eparegions %>%
+  dplyr::select(EPA_region, FIPS) %>%
+  dplyr::rename(State = FIPS)
+eparegions$EPA_region <- as.factor(eparegions$EPA_region)
+eparegions$State <- as.numeric(eparegions$State)
+eparegions
+
+# Join altogether
+covariates <- inner_join(census_pop_density,hh_income_census) %>%
+  inner_join(urban_rural_counties_2013)
+covariates
+covariates$State <- substr(covariates$County, 0, 2)
+covariates$State <- as.numeric(covariates$State)
+covariates$pop_density <- as.numeric(as.character(covariates$pop_density))
+covariates$housing_density <- as.numeric(as.character(covariates$housing_density))
+covariates
+covariates <- inner_join(covariates, eparegions)
+covariates
+native_census <- native_census %>% 
+  dplyr::rename(County = GEOID) %>%
+  dplyr::select(County, native_prop)
+covariates <- covariates %>% inner_join(native_census)
+covariates
+```
+
+
+##2.3 MAIN ANALYSIS: Define all AI/Non-AI populated counties, extract monitor/model PM2.5 concentrations & monitor coverage
+
+After defining different AI classifications above, we collect all the counties that fit in at least one of those definitions and create a master list of predominantly AI-populated counties. We use anti-join to create a list of all non-AI populated counties.
+####2.3.1 First define counties:
+```{r}
+# separate AI definitions from above
+# native_rural_counties
+# native_census_counties
+# reservation_counties
+
+# Select common county column from all three classification definitions and join into single df
+census <- native_census_counties %>% dplyr::select(County)
+reservation <- reservation_counties %>% dplyr::select(County)
+cluster <- native_rural_counties %>% dplyr::select(County)
+
+all_native_counties <- rbind(census, reservation, cluster)
+
+# only keep unique values, because classification definitions overlap
+all_native_counties <- unique(all_native_counties) 
+view(all_native_counties)
+
+# Get list of all US counties from census
+all_counties <- get_decennial(geography = "county", 
+                               variables = total_pop, 
+                               year = 2010)
+all_counties$State <- substr(all_counties$GEOID, 0, 2)
+all_counties$State <- as.numeric(all_counties$State)
+all_counties <- all_counties %>%
+  filter(State <= 56,
+         State != 2,
+         State != 15) #filter out HI, AL, US territories
+
+# County list of all non-native counties
+all_counties_list <- all_counties %>% dplyr::select(GEOID) %>% 
+  dplyr::rename(County = GEOID) #cleaned all_counties df to use in anti_join
+all_general_counties <- anti_join(x = all_counties_list,
+                                  y = all_native_counties,
+                                  by= "County") %>% 
+  filter(!str_detect(County, "^02"),
+         !str_detect(County, "^15")) 
+
+all_native_counties$county_type <- 1
+all_general_counties$county_type <- 0
+main_analysis_counties <- rbind(all_native_counties, all_general_counties)
+main_analysis_counties
+```
+
+####2.3.2 Function to assign monitor PM2.5 values for county
+```{r}
+PM25_extract <- function(PM25_data, county, output_list){
+  yr <- 2000
+  for (year in 1:19){
+    output_list[[year]] <- merge(county,
+                                 PM25_data[[year]],
+                                 by = "County", 
+                                 all.x = TRUE) # Merge tables, Aggregate values if there are two monitors per county
+    output_list[[year]]$num_mon <- ifelse(output_list[[year]]$annual_mean>=0,
+                                          yes = 1, no = 0) %>% replace_na(replace = 0) #only NAs have 0 bc num_mon is binary variable (y/n)
+    output_list[[year]] <- subset(output_list[[year]],
+                                  select = (c(County, annual_mean, num_mon))) 
+    output_list[[year]] <- aggregate(.~ County,
+                                     data = output_list[[year]],
+                                     FUN = sum,
+                                     na.action = NULL) #sum of all monitor concentrations in county
+    output_list[[year]]$annual_mean <- output_list[[year]]$annual_mean/output_list[[year]]$num_mon #divide sum by number of monitors for county avg
+    output_list[[year]]$mon_present <- ifelse(output_list[[year]]$num_mon>0,
+                                              yes = 1, no = 0)
+    output_list[[year]]$year <- yr
+    yr = yr + 1
+  }
+  return(output_list)
+}
+```
+
+####2.3.3 Extract monitor PM2.5 concentrations and coverage:
+```{r}
+# Extract PM2.5 county monitor concentrations
+all_native_PM25 <- list()
+all_native_PM25 <- PM25_extract(PM25_all,
+                                 all_native_counties,
+                                 all_native_PM25) 
+# Join all non-native counties with PM2.5 data
+all_general_PM25 <- list()
+all_general_PM25 <- PM25_extract(PM25_all,
+                                 all_general_counties,
+                                 all_general_PM25)
+all_general_PM25
+```
+
+####2.3.4 Extract model PM2.5 concentrations:
+```{r}
+# extract values for main analysis AI counties
+library(tidyverse)
+model_PM25 <- do.call(rbind, model_PM25)
+model_PM25 <- model_PM25 %>% dplyr::rename(County=FIPS)
+model_PM25$State <- as.numeric(model_PM25$State)
+model_PM25 <- inner_join(model_PM25, covariates)
+model_PM25 <- model_PM25 %>% inner_join(main_analysis_counties)
+view(model_PM25)
+```
+
+
+###2.4 SENSITIVITY ANALYSIS: Assign monitor PM2.5 concentrations for different AI classifications separately
+####2.4.1 Extract monitor PM2.5 concentrations for AI=populated counties: rural cluster, census, reservation counties
+```{r}
+# rural cluster
+native_PM25 <- list()
+native_PM25 <- PM25_extract(PM25_all,
+                            native_rural_counties,
+                            native_PM25)
+
+# census
+native_PM25_census <- list()
+native_PM25_census <- PM25_extract(PM25_all,
+                         native_census_counties,
+                         native_PM25_census)
+native_PM25_census
+
+# reservation
+reservation_PM25 <- list()
+reservation_PM25 <- PM25_extract(PM25_all,
+                         reservation_counties,
+                         reservation_PM25)
+reservation_PM25
+```
+
+####2.4.1 Extract monitor PM2.5 concentrations for non-AI populated counties, for diff classification groups separately
+#####first, define these non-AI counties
+```{r}
+# Define non-native counties based on reverse joining native counties with all counties
+# Find all non-native census counties (by 5% threshold), all non-native cluster counties, all reservation counties; rename columns to be the same name
+
+# standardize all dfs with single column "county"
+native_census_counties_list <- native_census_counties %>% dplyr::select(County)
+native_rural_counties_list <- native_rural_counties %>% dplyr::select(County)
+reservation_counties <- reservation_counties #don't need to adjust, already in correct form
+
+#get all counties that are not in these native county groups (complement)
+general_counties_census <- anti_join(x = all_counties_list,
+                                     y = native_census_counties,
+                                     by= "County")
+general_counties_cluster <- anti_join(all_counties_list,
+                                     native_rural_counties_list,
+                                     by = "County")
+general_counties_reservations <- anti_join(x = all_counties_list,
+                                           y = reservation_counties,
+                                           by= "County")
+```
+
+#####now, run function to extract PM2.5 concentrations for non-native counties of all 3 classification
+```{r}
+#join the general counties lists with PM2.5 and PM2.5 components datasets.
+#first make a list of all 3 county data frames to do a nested for loop with
+general_counties <- list(general_counties_cluster,
+                         general_counties_census,
+                         general_counties_reservations)
+#empty list of lists to store PM2.5 data across all years for different county datasets
+general_PM25 <- list(cluster=list(),
+                     census = list(),
+                     reservations = list())
+
+for (county in 1:length(general_counties)){
+  yr <- 2000
+  for (year in 1:19){
+    general_PM25[[county]][[year]] <- merge(general_counties[[county]],
+                               PM25_all[[year]],
+                               by = "County", 
+                               all.x = TRUE)
+    general_PM25[[county]][[year]]$num_mon <- ifelse(general_PM25[[county]][[year]]$annual_mean>=0,
+                                        yes = 1, no = 0) %>% replace_na(replace = 0)
+    general_PM25[[county]][[year]] <- subset(general_PM25[[county]][[year]],
+                                select = (c(County, annual_mean, num_mon)))
+    general_PM25[[county]][[year]] <- aggregate(.~ County,
+                                   data = general_PM25[[county]][[year]],
+                                   FUN = sum,
+                                   na.action = NULL)
+    general_PM25[[county]][[year]]$annual_mean <- general_PM25[[county]][[year]]$annual_mean/general_PM25[[county]][[year]]$num_mon
+    general_PM25[[county]][[year]]$mon_present <- ifelse(general_PM25[[county]][[year]]$num_mon>0,
+                                            yes = 1, no = 0)
+    general_PM25[[county]][[year]]$year <- yr
+    yr = yr + 1
+    }
+}
+length(general_PM25$reservation) #list of lists; should be 57 df total (3 classifications, 19 years each)
+```
+
+###2.5 SENSITIVITY ANALYSIS: Show overlap of AI county definitions (data visualized in venn diagram in paper to double check with)
+```{r}
+# Non-restricted for each definition (main analysis)
+census_counties <- native_census_counties %>% 
+  dplyr::select(County) 
+cluster_counties <- native_rural_counties %>% 
+  dplyr::select(County) 
+reservation_counties <- reservation_counties %>%
+  dplyr::select(County)
+
+#three-way overlap
+all_overlap <- cluster_counties %>% 
+  inner_join(census_counties) %>% 
+  inner_join(reservation_counties)
+nrow(all_overlap) #number of counties that fit all three definitions
+
+#two-way overlap
+cluster_census <- cluster_counties %>% 
+  inner_join(census_counties) %>% anti_join(all_overlap)
+nrow(cluster_census)
+
+cluster_reservation <- cluster_counties %>%
+  inner_join(reservation_counties) %>% anti_join(all_overlap)
+nrow(cluster_reservation)
+
+census_reservation <- census_counties %>%
+  inner_join(reservation_counties) %>% anti_join(all_overlap)
+nrow(census_reservation)
+
+#exclusive to each definition
+census_only <- census_counties %>%
+  anti_join(census_reservation) %>%
+  anti_join(cluster_census) %>%
+  anti_join(all_overlap)
+nrow(census_only)
+
+cluster_only <- cluster_counties %>%
+  anti_join(cluster_census) %>%
+  anti_join(cluster_reservation) %>%
+  anti_join(all_overlap)
+nrow(cluster_only)
+
+reservation_only <- reservation_counties %>%
+  anti_join(cluster_reservation) %>%
+  anti_join(census_reservation) %>%
+  anti_join(all_overlap)
+nrow(reservation_only)
+```
+
+
+#PART 3: DESCRIPTIVE RESULTS
+
+## 3.1 Descriptive statistics & bar graph for monitor coverage in native/non-native counties (by different classifications)
+### 3.1.1 Define fxn to calculate average # monitors per year for each county by county type, frequency plots of monitor distributions
+```{r}
+#1. Function to do get avg mon by county:
+avg_mon <- function(data, county_type){
+  monitors <- do.call(rbind, data) #create one long table with all years
+  monitors$county_type <- county_type
+  monitors <- subset(monitors, select = c(County, num_mon, county_type, year))
+  #make long -> wide with spread, in order to have columns of each year's values, and then find the mean of these columns
+  monitors <- spread(monitors, key = year, value = num_mon, fill = 0)
+  monitors$avg_mon <- rowMeans(monitors[c(seq(3,21))])
+  #only select the county, county_type for IDing in the bar plot, and avg # of monitor value columns
+  monitors <- subset(monitors,select = c(County, county_type, avg_mon))
+  return(monitors)}
+
+#2. Frequency function to get proportion of average monitors per county across all years, using output from avg_mon:
+mon_freq <- function(data, county_type){
+  freq <- plyr::count(data$avg_mon) #tbl with second column that records frequencies of the diff avg_mon values
+  freq$prop <- freq$freq/
+    sum(freq$freq) #new proportions column
+  #rename x to avg_mon
+  freq <- dplyr::rename(freq, avg_mon = x)
+  freq$county_type <- county_type
+  return(freq)} #for native and non-native, can check this output to see if area under curve adds up to 1
+
+#3. Function to combine frequencies of monitors for AI/non-AI counties and aggregate bins 
+combine_freq <- function(native_freq, general_freq){
+  all_mon <- rbind(general_freq, native_freq)
+  all_mon <- all_mon %>% 
+    mutate(bins = case_when(
+          avg_mon == 0 ~ "0",
+          avg_mon > 0 & avg_mon < 1 ~ "(0,1)", 
+          avg_mon >= 1 & avg_mon < 2 ~ "[1,2)",
+          avg_mon >= 2 ~ ">=2"))
+  all_mon$bins <- as.factor(all_mon$bins)
+  final_mon_tbl <- all_mon %>%
+    group_by(bins, county_type) %>%
+    dplyr::summarise(total_prop=sum(prop),
+                     total_freq=sum(freq)) %>% #summarize percent monitor (prop) and total num counties (freq) values for the four bins 
+    mutate(lvl_bins = factor(bins, levels = c("0","(0,1)", "[1,2)", ">=2"))) %>%
+    arrange(lvl_bins, county_type)
+  return(final_mon_tbl)
+}  
+```
+
+### 3.1.2 MAIN ANALYSIS: Monitor coverage for all AI/non-AI counties
+```{r}
+native_PM25_monitors <- avg_mon(all_native_PM25, "AI-Populated County")
+native_PM25_monitors
+native_PM25_freq <- mon_freq(native_PM25_monitors, "AI-Populated County")
+general_PM25_monitors <- avg_mon(all_general_PM25, "Non-AI Populated County")
+general_PM25_freq <- mon_freq(general_PM25_monitors, "Non-AI Populated County")
+
+all_PM25_tbl <- combine_freq(native_PM25_freq, general_PM25_freq)
+# all_PM25_tbl$total_prop <- all_PM25_tbl$total_prop*100 #convert decimal-percentage to actual percentage
+#check area under curve equals 1 for non-native and native
+sum(general_PM25_freq$prop)
+sum(native_PM25_freq$prop)
+
+#Bar graph all counties
+all_PM25_plot <- ggplot(all_PM25_tbl, 
+                            aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
+       fill = "County Type") 
+all_PM25_plot 
+all_PM25_tbl
+```
+
+
+### 3.1.3 SENSITIVITY ANALYSIS: Monitor coverage for AI/non-AI counties of the 3 different classifications
+#### 3.1.3.1 Monitor coverage for census definition native/non-native counties
+```{r}
+#CENSUS avg monitors
+native_PM25_census_monitors <- avg_mon(native_PM25_census, "AI-Populated County")
+native_PM25_census_freq <- mon_freq(native_PM25_census_monitors, "AI-Populated County")
+general_PM25_census_monitors <- avg_mon(general_PM25$census, "Non-AI County")
+general_PM25_census_freq <- mon_freq(general_PM25_census_monitors, "Non-AI County")
+census_PM25_tbl <- combine_freq(native_PM25_census_freq, general_PM25_census_freq)
+census_PM25_tbl 
+native_PM25_census_freq
+
+#check area under curve equals 1 for non-native and native
+sum(general_PM25_census_freq$prop)
+sum(native_PM25_census_freq$prop)
+
+#Bar graph census counties
+census_PM25_plot <- ggplot(census_PM25_tbl, 
+                            aes(x=lvl_bins, 
+                                y = total_prop,
+                                fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 11)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution \n in AI vs Non-AI Populated Census Counties, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
+       fill = "County Type") 
+census_PM25_plot 
+```
+
+#### 3.1.3.2 Monitor coverage for cluster definition native/non-native counties
+```{r}
+#CLUSTER avg annual mon
+native_PM25_cluster_monitors <- avg_mon(native_PM25, "AI-Populated County")
+native_PM25_cluster_freq <- mon_freq(native_PM25_cluster_monitors, "AI-Populated County")
+general_PM25_cluster_monitors <- avg_mon(general_PM25$cluster, "Non-AI Populated County")
+general_PM25_cluster_freq <- mon_freq(general_PM25_cluster_monitors, "Non-AI Populated County")
+
+cluster_PM25_tbl <- combine_freq(general_PM25_cluster_freq, native_PM25_cluster_freq)
+sum(general_PM25_cluster_freq$prop)
+sum(native_PM25_cluster_freq$prop)
+
+# need to add in "fake" extra row for >=2 natives (since 0 native counties have more than 2 monitors)
+extra_row <- data.frame(">=2",
+               "AI-Populated County",
+               0.001,
+               0,
+               ">=2")
+names(extra_row) <- c(names(cluster_PM25_tbl))
+extra_row$county_type <- as.character(extra_row$county_type)
+cluster_PM25_tbl
+cluster_PM25_tbl <- bind_rows(cluster_PM25_tbl, extra_row)
+cluster_PM25_tbl$lvl_bins <- as.factor(cluster_PM25_tbl$lvl_bins)
+cluster_PM25_tbl
+#reorder factors
+cluster_PM25_tbl$lvl_bins <- factor(cluster_PM25_tbl$lvl_bins, 
+                                    levels = c("0", "(0,1)", "[1,2)", ">=2"))
+
+cluster_PM25_tbl
+cluster_PM25_plot <- ggplot(cluster_PM25_tbl, 
+                            aes(x=lvl_bins, 
+                                y = total_prop,
+                                fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 11)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution in Rural Clustered Counties, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
+       fill = "County Type")
+
+cluster_PM25_plot
+```
+
+####3.1.3.3 Monitor coverage for cluster definition native/non-native counties
+```{r}
+reservation_PM25_monitors <- avg_mon(reservation_PM25, "AI-Populated County")
+reservation_PM25_freq <- mon_freq(reservation_PM25_monitors, "AI-Populated County")
+
+general_PM25_reservations_monitors <-avg_mon(general_PM25$reservations, "General County")
+general_reservation_PM25_freq <- mon_freq(general_PM25_reservations_monitors,"General County")
+
+reservation_PM25_tbl <- combine_freq(reservation_PM25_freq,
+                                     general_reservation_PM25_freq)
+reservation_PM25_plot <- ggplot(reservation_PM25_tbl, 
+                            aes(x=lvl_bins, 
+                                y = total_prop,
+                                fill=county_type)) + 
+  geom_bar(stat="identity", position = "dodge") +
+  labs(title = "PM2.5 Monitor Distribution in Counties containing AI Reservations \n vs. Non-AI Counties",
+       x = "Average number of annual monitors per county type from 1999-2018",
+       y = "Proportion of Counties",
+       fill = "County Type")
+sum(reservation_PM25_freq$prop)
+sum(general_reservation_PM25_freq$prop)
+reservation_PM25_plot
+reservation_PM25_tbl
+```
+
+##3.2 Clean monitor data further to extract mean PM2.5 concentrations per county across all years, PM2.5 concentrations per county per EACH year, mean monitor count per county across all years, and monitor count per county per EACH year.
+
+Next off, we need to clean the data further to have estimates for our Table 1, PM2.5 concentration graphs by State over time, and statistical regression models. 
+
+###3.2.1 Compute Monitor Concentrations (averaged across all years and each annual average, per county)
+
+####3.2.1.1 Define functions
+
+I first define a function (drop_all_NA) that averages PM2.5 concentrations for each county across all available study years with monitors, and drops counties with NO MONITORS across all years from the AI/non-AI county dfs. The second function (combine_avg_exp) combines the two AI/non-AI county dfs into one df and gets the average PM2.5 concentration based on available monitor estimates; the native_status input is a binary indicator variable (1 = AI, 0 = non-AI) so you know which counties are which when all the counties are combined in a single df. When I run it, it's a function within a function (see below). The final output df is a table with each row entry being a county, and the average PM2.5 concentration across all study years.
+
+The third function (exp_ctyear) iterates through all counties for each study year (no averaging) and drops county-years with NO MONITORS. The fourth function (combine_allexp), similar to the second function, combines the two AI/non-AI county dfs into one df, also joining it with the covariates df defined above, adding extra columns for state FIPS, population density & HH income quantiles, which are later used in the regression models. The final output df is a table with each row entry being a county in a given year, and the average PM2.5 concentration in that particular year; thus, counties will have multiple row entries if they had active monitor(s) in multiple years.
+
+```{r}
+#FUNCTION to extract PM2.5 exposure, averaged across all years, dropping counties with ALL NAs (i.e. counties with no monitors across all years)
+drop_all_NA <- function(annual_data, native_status){
+  int_data <- do.call(rbind, annual_data) #create one long table with all years
+  int_data$county_type <- native_status
+  int_data$county_type <- as.factor(int_data$county_type)
+  int_data <- spread(int_data, key = year, value = annual_mean) #change from long to wide format (each column = year, row = county)
+  int_data$avg_pm <- rowMeans(int_data[c(seq(5,23))], na.rm = TRUE) #extract mean PM2.5 concentration for each county by taking mean of rows across all years (columns)
+  int_data <- subset(int_data, select = c(County, county_type, avg_pm))#only select the county, county_type for IDing in the bar plot, and avg # of monitor value columns
+  int_data <- int_data %>% filter(avg_pm > 0) #drop rows (counties) with all NAs for all years (avg_pm = 0.0000)
+  return(int_data)}
+
+#FUNCTION to combine native/non-native PM2.5 annual averages
+combine_avgexp <- function(native, general, fxn){
+  native_exp <- fxn(native, 1)
+  general_exp <- fxn(general, 0)
+  full_exp <- rbind(native_exp, general_exp)
+  full_exp <- full_exp %>% group_by(County,county_type) %>%
+    dplyr::summarise(avg_pm_all = mean(avg_pm)) #summarizes concentration levels if multiple monitors in a county
+  avgexp_full <- inner_join(full_exp, covariates)  #join with covariates data
+  avgexp_full$county_type <- as.factor(avgexp_full$county_type) #convert binary indicator variable for AI/non-AI into factor
+  avgexp_full$State <- substr(avgexp_full$County, 0, 2)  #add column for state based on first two characters of county FIPS code
+  avgexp_full$State <- as.numeric(avgexp_full$State)  #need to recode State as numeric, for random effects
+  avgexp_full <- avgexp_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)  #filter out US territories, AL and HI
+  return(avgexp_full)} 
+
+#FUNCTION keep all exposure data, for each county year; drop any NAs
+exp_ctyear <- function(annual_data, native_status){
+  int_data <- do.call(rbind, annual_data) #create one long table with all years
+  int_data$county_type <- native_status
+  int_data$county_type <- as.factor(int_data$county_type)
+  int_data <- na.omit(int_data) #remove county-years with NAs
+  int_data$year <- as.factor(int_data$year)
+  int_data <- subset(int_data, select = c(County, county_type, annual_mean, year))  #only select the county, county_type for AI/non-AI indicator, and avg # of monitor value columns
+  return(int_data)
+}
+
+#FUNCTION to combine all county year exposure data
+combine_allexp <-function(native, general, fxn){
+  native_exp <- fxn(native, 1)
+  general_exp <- fxn(general, 0)
+  full_exp <- rbind(native_exp, general_exp)
+  full_exp <- full_exp %>% group_by(County,county_type, year) %>%
+    dplyr::summarise(annual_mean_all = mean(annual_mean)) #summarize exp if multiple monitors in county
+  annualexp_full <- inner_join(full_exp, covariates)  #join with covariates data
+  annualexp_full$county_type <- as.factor(annualexp_full$county_type)
+  annualexp_full$State <- substr(annualexp_full$County, 0, 2)   #add column for state based on first two characters of county FIPS code
+  annualexp_full$State <- as.numeric(annualexp_full$State)  #need to recode State as numeric, for random effects
+  annualexp_full <- annualexp_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)  #filter out territories, AL and HI
+  # Create extra columns for hhinc and popd quantiles
+  annualexp_full$popd_q <- cut(annualexp_full$pop_density, 
+                               quantile(annualexp_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+  annualexp_full$hhinc_q <- cut(annualexp_full$hh_income, 
+                            quantile(annualexp_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+  return(annualexp_full)
+}
+```
+
+###3.2.2 Compute Monitor Coverage (average monitor count across all years per county & monitor count per county per EACH year)
+
+####3.2.2.1 Define functions
+
+The first function averages the number of monitors across all counties for all study years. The second function aggregates monitor count data for each county for each separate study year.
+
+```{r}
+#Join datasets to make data table with average monitors, county, native/non-native "exposure", population density
+#Continuous dependent variable; Use this for t-test and linear mixed models
+#Function:
+avg_mon_full <- function(native, general){
+  native$county_type <- 1
+  general$county_type <- 0 #recode column with binary variables for model
+  PM25_avgmon <- rbind(native, general)
+  #join with covariates data
+  avgmon_full <- inner_join(PM25_avgmon, covariates)
+  avgmon_full$county_type <- as.factor(avgmon_full$county_type)
+  avgmon_full
+  #add column for state based on first two characters of county FIPS code
+  avgmon_full$State <- substr(avgmon_full$County, 0, 2)
+  #need to recode State as numeric, for random effects
+  avgmon_full$State <- as.numeric(avgmon_full$State)
+  avgmon_full <- avgmon_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)
+  avgmon_full <- avgmon_full %>%
+    mutate(mon_present = case_when(
+      avg_mon > 0 ~ 1,
+      avg_mon == 0 ~ 0))
+  # Create extra columns for hhinc and popd quantiles
+  avgmon_full$popd_q <- cut(avgmon_full$pop_density, 
+                               quantile(avgmon_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+  avgmon_full$hhinc_q <- cut(avgmon_full$hh_income, 
+                            quantile(avgmon_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+  return(avgmon_full)}
+```
+
+```{r}
+#Write function to aggregate count data across all years, also monitor present or not
+count_mon <- function(native, general){
+  native_count <- do.call(rbind, native)
+  #binary indicator
+  native_count$county_type <- 1
+  general_count <- do.call(rbind, general)
+  general_count$county_type <- 0
+  #combine native/non-native
+  count_all <- rbind(native_count,
+                        general_count)
+  #join with covariates data
+  count_all_full <- inner_join(count_all, covariates)
+  count_all_full$county_type <- as.factor(count_all_full$county_type)
+  
+  #add column for state based on first two characters of county FIPS code
+  count_all_full$State <- substr(count_all_full$County, 0, 2)
+  #need to recode State as numeric, for random effects
+  count_all_full$State <- as.numeric(count_all_full$State)
+  count_all_full <- count_all_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)
+  count_all_full$year <- as.factor(count_all_full$year)
+  # Create extra columns for hhinc and popd quantiles
+  count_all_full$popd_q <- cut(count_all_full$pop_density, 
+                               quantile(count_all_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+  count_all_full$hhinc_q <- cut(count_all_full$hh_income, 
+                            quantile(count_all_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+  return(count_all_full)}
+```
+
+####3.2.1.2 Run functions on AI/non-AI populated counties (main analysis), and separately classification definitions (sensitivity analysis)
+```{r}
+# MAIN ANALYSIS
+  # ALL COUNTIES annual PM2.5 avgs
+all_avg_exp <- combine_avgexp(all_native_PM25, all_general_PM25, drop_all_NA)
+all_avg_exp
+  #ALL COUNTIES PM2.5 exposures, county year 
+all_ctyear_exp <- combine_allexp(all_native_PM25, all_general_PM25, exp_ctyear)
+
+# SENSITIVITY ANALYSIS
+  #CENSUS annual PM2.5 avgs
+census_avg_exp <- combine_avgexp(native_PM25_census, general_PM25$census, drop_all_NA)
+  #CLUSTER annual PM2.5 avgs
+cluster_avg_exp<- combine_avgexp(native_PM25, general_PM25$cluster, drop_all_NA)
+  #RESERVATION annual PM25 avgs 
+reservation_avg_exp <- combine_avgexp(reservation_PM25, general_PM25$reservations, drop_all_NA)
+
+  #CENSUS PM2.5 exposures county year 
+census_ctyear_exp <- combine_allexp(native_PM25_census, general_PM25$census, exp_ctyear)
+  #CLUSTERPM2.5 exposures county year 
+cluster_ctyear_exp <- combine_allexp(native_PM25, general_PM25$cluster, exp_ctyear)
+  #RESERVATION PM2.5 exposures county year
+reservation_ctyear_exp <- combine_allexp(reservation_PM25, general_PM25$reservations, exp_ctyear)
+
+# DFs of MEAN annual PM2.5 concentrations across all study years for each county with data
+all_avg_exp
+census_avg_exp
+cluster_avg_exp
+reservation_avg_exp
+
+# DFs of PM2.5 concentrations for each COUNTY-YEAR
+all_ctyear_exp
+census_ctyear_exp
+cluster_ctyear_exp
+reservation_ctyear_exp
+```
+
+####3.2.1.2 Run functions on AI/non-AI populated counties (main analysis), and separately classification definitions (sensitivity analysis)
+```{r}
+# MAIN ANALYSIS
+  #Average monitor count data
+all_avgmon_full <- avg_mon_full(native_PM25_monitors,
+                                general_PM25_monitors)
+
+  #Monitor count data for each county-year
+all_native_count_full <- count_mon(all_native_PM25, all_general_PM25)
+
+all_avgmon_full
+all_native_count_full
+
+# SENSITIVITY ANALYSIS
+  #1) Census Average Monitor Count
+census_avgmon_full <- avg_mon_full(native_PM25_census_monitors, 
+                              general_PM25_census_monitors)
+  # Census Monitor Count for each county-year
+census_count_full <- count_mon(native_PM25_census, general_PM25$census)
+
+  #2) Cluster Average Monitor Count
+cluster_avgmon_full <- avg_mon_full(native_PM25_cluster_monitors, 
+                               general_PM25_cluster_monitors)
+  #Cluster Monitor Count for each county-year
+cluster_count_full <- count_mon(native_PM25, general_PM25$cluster)
+
+  #3) Reservation Average Monitor Count
+reservation_avgmon_full <- avg_mon_full(reservation_PM25_monitors,
+                            general_PM25_reservations_monitors)
+  #Reservation Monitor Count for each county-year
+reservation_count_full <- count_mon(reservation_PM25, general_PM25$reservations)
+
+census_avgmon_full
+census_count_full
+
+cluster_avgmon_full
+cluster_count_full
+
+reservation_avgmon_full
+reservation_count_full
+```
+
+
+
+## 3.3 Table 1: Descriptive Statistics by County for all counties, all counties with monitors, rural counties, rural counties with monitors (AI/Non-AI)
+
+Characteristics include: number of counties, mean annual PM2.5 monitor count, mean monitor PM2.5 concentration, mean model PM2.5 concentration, mean population density, mean household income.
+
+I created two tables, one with all counties and counties with monitors (first chunk), the next with rural counties and rural counties with monitors (second chunk).
+
+August 4 update: fixed the mean annual concentrations by monitor and SD
+
+### 3.3.1 All Counties 
+```{r}
+# First table has columns for all counties and all counties with monitors
+# Join 
+all_native_counties_full <- inner_join(all_native_counties, covariates)
+all_general_counties_full <- inner_join(all_general_counties, covariates)
+#Number of counties
+num_counties_row_main <- data.frame(nrow(all_native_counties_full),
+                                    nrow(all_general_counties_full),
+                                    nrow(all_avg_exp %>% filter(county_type==1)),
+                                    nrow(all_avg_exp %>% filter(county_type==0)))
+names(num_counties_row_main) <- c("AI-Populated County", 
+                                  "Non-AI-Populated County",
+                                  "AI-Populated County with monitors",
+                                  "Non-AI-Populated County with monitors")
+
+#Mean monitor count and SD
+native_avgmon_full <- all_avgmon_full %>% filter(county_type == 1) 
+general_avgmon_full <- all_avgmon_full %>% filter(county_type == 0)
+native_monitors_avgmon_full <- all_avgmon_full %>% filter(county_type == 1,
+                                                           avg_mon > 0) 
+general_monitors_avgmon_full <- all_avgmon_full %>% filter(county_type == 0,
+                                                           avg_mon >0)
+mean_mon_row_main <- data.frame(mean(native_avgmon_full$avg_mon),
+                                mean(general_avgmon_full$avg_mon),
+                                mean(native_monitors_avgmon_full$avg_mon),
+                                mean(general_monitors_avgmon_full$avg_mon))
+names(mean_mon_row_main) <- names(num_counties_row_main)
+
+sd_mon_row_main <- data.frame(sd(native_avgmon_full$avg_mon),
+                                sd(general_avgmon_full$avg_mon),
+                                sd(native_monitors_avgmon_full$avg_mon),
+                                sd(general_monitors_avgmon_full$avg_mon))
+names(sd_mon_row_main) <- names(num_counties_row_main)
+
+#Mean Annual Concentrations by Monitors & SD
+native_avg_exp <- all_avg_exp %>% filter(county_type == 1)
+general_avg_exp <- all_avg_exp %>% filter(county_type == 0)
+
+avg_PM25_row_main <-data.frame(mean(native_avg_exp$avg_pm_all),
+                               mean(general_avg_exp$avg_pm_all),
+                               mean(native_avg_exp$avg_pm_all),
+                               mean(general_avg_exp$avg_pm_all))
+names(avg_PM25_row_main) <- names(num_counties_row_main) 
+sd_PM25_row_main <- data.frame(sd(native_avg_exp$avg_pm_all),
+                               sd(general_avg_exp$avg_pm_all),
+                               sd(monitors_native_avgexp$avg_pm_all),
+                               sd(monitors_general_avgexp$avg_pm_all))
+names(sd_PM25_row_main) <- names(num_counties_row_main) 
+
+#Mean Annual Concentrations by Model & SD
+  # First, obtain average model data
+avg_modelPM25 <- spread(model_PM25, key = Year, value = PM25)
+view(avg_modelPM25)
+
+avg_modelPM25$avg_modelpm <- rowMeans(avg_modelPM25[c(seq(11,29))], na.rm = TRUE) #get mean of all study years 2000-2018
+avg_modelPM25 
+
+native_modelexp <- avg_modelPM25 %>% filter(county_type == 1)
+general_modelexp <- avg_modelPM25 %>% filter(county_type == 0)
+
+avg_modelPM25$county_type <- as.factor(avg_modelPM25$county_type) #need to convert into a factor to join with the other dataset
+native_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_native_avgexp) %>%
+  filter(county_type == 1)
+
+general_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_general_avgexp) %>%
+  filter(county_type == 0)
+general_monitor_modelexp
+
+avg_modelPM25_row_main <-data.frame(mean(native_modelexp$avg_modelpm),
+                               mean(general_modelexp$avg_modelpm),
+                               mean(native_monitor_modelexp$avg_modelpm),
+                               mean(general_monitor_modelexp$avg_modelpm))
+names(avg_modelPM25_row_main) <- names(num_counties_row_main) 
+
+sd_modelPM25_row_main <- data.frame(sd(native_modelexp$avg_modelpm),
+                               sd(general_modelexp$avg_modelpm),
+                               sd(native_monitor_modelexp$avg_modelpm),
+                               sd(general_monitor_modelexp$avg_modelpm))
+names(sd_modelPM25_row_main) <- names(num_counties_row_main) 
+
+#covariate mean and SD rows
+  # population density
+popdensity_row_main <- data.frame(mean(native_avgmon_full$pop_density),
+                                  mean(general_avgmon_full$pop_density),
+                                  mean(native_monitors_avgmon_full$pop_density),
+                                  mean(general_monitors_avgmon_full$pop_density))
+names(popdensity_row_main) <- names(num_counties_row_main) 
+
+sd_popden_main <- data.frame(sd(native_avgmon_full$pop_density),
+                                  sd(general_avgmon_full$pop_density),
+                                  sd(native_monitors_avgmon_full$pop_density),
+                                  sd(general_monitors_avgmon_full$pop_density))
+names(sd_popden_main) <- names(num_counties_row_main) 
+
+  # hh income
+hhinc_row_main <- data.frame(mean(native_avgmon_full$hh_income),
+                             mean(general_avgmon_full$hh_income),
+                             mean(native_monitors_avgmon_full$hh_income),
+                             mean(general_monitors_avgmon_full$hh_income))
+names(hhinc_row_main) <- names(num_counties_row_main) 
+sd_hhinc_main <- data.frame(sd(native_avgmon_full$hh_income),
+                             sd(general_avgmon_full$hh_income),
+                             sd(native_monitors_avgmon_full$hh_income),
+                             sd(general_monitors_avgmon_full$hh_income))
+names(sd_hhinc_main) <- names(num_counties_row_main) 
+
+
+#round mean rows
+num_counties_row_main[] <- lapply(num_counties_row_main,as.integer)
+mean_mon_row_main <- format(round(mean_mon_row_main, 1), nsmall = 1)
+avg_PM25_row_main <- format(round(avg_PM25_row_main, 1), nsmall = 1)
+avg_modelPM25_row_main <-format(round(avg_modelPM25_row_main, 1), nsmall = 1)
+popdensity_row_main[] <- lapply(popdensity_row_main,as.integer)
+hhinc_row_main[] <- lapply(hhinc_row_main,as.integer)
+
+#round sd rows
+sd_mon_row_main <- format(round(sd_mon_row_main, 1), nsmall = 1)
+sd_PM25_row_main <- format(round(sd_PM25_row_main, 1), nsmall = 1)
+sd_modelPM25_row_main <-format(round(sd_modelPM25_row_main, 1), nsmall = 1)
+sd_popden_main[] <- lapply(sd_popden_main, as.integer)
+sd_hhinc_main[] <- lapply(sd_hhinc_main, as.integer)
+
+
+sd_mon_row_main
+sd_PM25_row_main
+sd_popden_main
+sd_hhinc_main
+
+#make list of rows
+rows_list_main <- list(num_counties_row_main,
+      mean_mon_row_main,
+      avg_PM25_row_main,
+      avg_modelPM25_row_main,
+      popdensity_row_main,
+      hhinc_row_main)
+rows_list_main
+#rbind all rows together
+table_1_main <- do.call(rbind, rows_list_main)
+table_1_main
+row.names(table_1_main) <- c("Number of Counties",
+                             "Average Monitor Count per year",
+                        "Mean Monitor PM2.5 Concentration",
+                        "Mean Model PM2.5 Concentrations",
+                        "Population Density",
+                        "HH Income")
+require(data.table) #need to convert for latex export
+test <- setDT(table_1_main)
+main_table1 <- xtable(test)
+main_table1
+
+#sd table (to manually input to table 1)
+row_list_sd <- list(sd_mon_row_main,
+                    sd_PM25_row_main,
+                    sd_modelPM25_row_main,
+                    sd_popden_main,
+                    sd_hhinc_main)
+table_1_sd <- do.call(rbind,row_list_sd)
+row.names(table_1_sd) <- c("SD Mean Monitor Count",
+                           "SD Monitor PM2.5",
+                        "SD Model PM2.5",
+                        "Population Density",
+                        "HH Income")
+test_sd <- setDT(table_1_sd)
+main_table_sd <- xtable(test_sd)
+main_table_sd
+```
+
+###3.3.2 Rural Counties
+Note: I use the same variable names as above in intermediate steps for calculating each of the characteristics (overwriting values), so please run each chunk in their entirety to ensure the output tables
+
+```{r}
+# Table 1.2: Second table has columns for rural counties and rural counties with monitors
+rural_native <- all_native_counties_full %>% filter(as.numeric(land_use) >= 4)
+rural_general <- all_general_counties_full %>% filter(as.numeric(land_use) >= 4)
+
+#Number of counties
+num_counties_row_main <- data.frame(nrow(rural_native),
+                                    nrow(rural_general),
+                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 4,
+                                                                county_type==1)),
+                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 4,
+                                                                county_type==0)))
+names(num_counties_row_main) <- c("Rural AI-Populated County", 
+                                  "Rural Non-AI-Populated County",
+                                  "Rural AI-Populated County with monitors",
+                                  "Rural Non-AI-Populated County with monitors")
+
+# Rural counties: Mean monitor count & SD
+rural_native_avgmon <- native_avgmon_full %>% filter(as.numeric(land_use) >= 4)
+rural_general_avgmon <- general_avgmon_full %>% filter(as.numeric(land_use) >= 4)
+rural_native_monitors_avgmon <- rural_native_avgmon %>% filter(county_type == 1,
+                                                           avg_mon > 0) 
+rural_general_monitors_avgmon <- rural_general_avgmon %>% filter(county_type == 0,
+                                                           avg_mon >0)
+mean_mon_row_main <- data.frame(mean(rural_native_avgmon$avg_mon),
+                                mean(rural_general_avgmon$avg_mon),
+                                mean(rural_native_monitors_avgmon$avg_mon),
+                                mean(rural_general_monitors_avgmon$avg_mon))
+names(mean_mon_row_main) <- names(num_counties_row_main)
+
+sd_mon_row_main <- data.frame(sd(rural_native_avgmon$avg_mon),
+                                sd(rural_general_avgmon$avg_mon),
+                                sd(rural_native_monitors_avgmon$avg_mon),
+                                sd(rural_general_monitors_avgmon$avg_mon))
+names(sd_mon_row_main) <- names(num_counties_row_main)
+
+# Rural counties: monitor mean concentrations & SD
+rural_native_avgexp <- native_avg_exp %>% filter(as.numeric(land_use) >= 4)
+rural_general_avgexp <- general_avg_exp %>% filter(as.numeric(land_use) >= 4)
+monitors_rural_avgexp <- rural_native_avgexp
+monitors_general_avgexp <- rural_general_avgexp
+
+avg_PM25_row_main <-data.frame(mean(rural_native_avgexp$avg_pm_all),
+                               mean(rural_general_avgexp$avg_pm_all),
+                               mean(monitors_rural_avgexp$avg_pm_all),
+                               mean(monitors_general_avgexp$avg_pm_all))
+names(avg_PM25_row_main) <- names(num_counties_row_main) 
+
+sd_PM25_row_main <- data.frame(sd(rural_native_avgexp$avg_pm_all),
+                               sd(rural_general_avgexp$avg_pm_all),
+                               sd(monitors_rural_avgexp$avg_pm_all),
+                               sd(monitors_general_avgexp$avg_pm_all))
+names(sd_PM25_row_main) <- names(num_counties_row_main) 
+# Rural counties: model mean concentrations & SD
+rural_native_modelexp <- avg_modelPM25 %>% filter(county_type == 1,
+                                                  as.numeric(land_use) >= 4)
+rural_general_modelexp <- avg_modelPM25 %>% filter(county_type == 0,
+                                                   as.numeric(land_use) >= 4)
+rural_native_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_native_avgexp) %>%
+  filter(county_type == 1, as.numeric(land_use) >= 4)
+rural_general_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_general_avgexp) %>%
+  filter(county_type == 0, as.numeric(land_use) >= 4)
+
+
+avg_modelPM25_row_main <-data.frame(mean(rural_native_modelexp$avg_modelpm),
+                               mean(rural_general_modelexp$avg_modelpm),
+                               mean(rural_native_monitor_modelexp$avg_modelpm),
+                               mean(rural_general_monitor_modelexp$avg_modelpm))
+names(avg_modelPM25_row_main) <- names(num_counties_row_main) 
+
+sd_modelPM25_row_main <- data.frame(sd(rural_native_modelexp$avg_modelpm),
+                               sd(rural_general_modelexp$avg_modelpm),
+                               sd(rural_native_monitor_modelexp$avg_modelpm),
+                               sd(rural_general_monitor_modelexp$avg_modelpm))
+names(sd_modelPM25_row_main) <- names(num_counties_row_main) 
+
+#covariate mean rows! &SD
+  # population density
+popdensity_row_main <- data.frame(mean(rural_native_avgmon$pop_density),
+                                  mean(rural_general_avgmon$pop_density),
+                                  mean(rural_native_monitors_avgmon$pop_density),
+                                  mean(rural_general_monitors_avgmon$pop_density))
+names(popdensity_row_main) <- names(num_counties_row_main) 
+
+sd_popden_main <- data.frame(sd(rural_native_avgmon$pop_density),
+                                  sd(rural_general_avgmon$pop_density),
+                                  sd(rural_native_monitors_avgmon$pop_density),
+                                  sd(rural_general_monitors_avgmon$pop_density))
+names(sd_popden_main) <- names(num_counties_row_main) 
+
+  # hh income
+hhinc_row_main <- data.frame(mean(rural_native_avgmon$hh_income),
+                             mean(rural_general_avgmon$hh_income),
+                             mean(rural_native_monitors_avgmon$hh_income),
+                             mean(rural_general_monitors_avgmon$hh_income))
+names(hhinc_row_main) <- names(num_counties_row_main) 
+sd_hhinc_main <- data.frame(sd(rural_native_avgmon$hh_income),
+                             sd(rural_general_avgmon$hh_income),
+                             sd(rural_native_monitors_avgmon$hh_income),
+                             sd(rural_general_monitors_avgmon$hh_income))
+names(sd_hhinc_main) <- names(num_counties_row_main) 
+
+
+#round mean rows first
+num_counties_row_main[] <- lapply(num_counties_row_main,as.integer)
+mean_mon_row_main <- format(round(mean_mon_row_main, 1), nsmall = 1)
+avg_PM25_row_main <- format(round(avg_PM25_row_main, 1), nsmall = 1)
+avg_modelPM25_row_main <-format(round(avg_modelPM25_row_main, 1), nsmall = 1)
+popdensity_row_main[] <- lapply(popdensity_row_main,as.integer)
+hhinc_row_main[] <- lapply(hhinc_row_main,as.integer)
+
+#round sd rows
+sd_mon_row_main <- format(round(sd_mon_row_main, 1), nsmall = 1)
+sd_PM25_row_main <- format(round(sd_PM25_row_main, 1), nsmall = 1)
+sd_modelPM25_row_main <-format(round(sd_modelPM25_row_main, 1), nsmall = 1)
+sd_popden_main[] <- lapply(sd_popden_main, as.integer)
+sd_hhinc_main[] <- lapply(sd_hhinc_main, as.integer)
+
+
+sd_mon_row_main
+sd_PM25_row_main
+sd_popden_main
+sd_hhinc_main
+
+#make list of rows
+rows_list_main_rural <- list(num_counties_row_main,
+      mean_mon_row_main,
+      avg_PM25_row_main,
+      avg_modelPM25_row_main,
+      popdensity_row_main,
+      hhinc_row_main)
+rows_list_main_rural
+#rbind all rows together
+table_1_main_rural <- do.call(rbind, rows_list_main_rural)
+table_1_main_rural
+row.names(table_1_main_rural) <- c("Number of Counties",
+                             "Average Monitor Count per year",
+                        "Mean Monitor PM2.5 Concentration",
+                        "Mean Model PM2.5 Concentrations",
+                        "Population Density",
+                        "HH Income")
+require(data.table) #need to convert for latex export
+table1_rural_dt <- setDT(table_1_main_rural)
+main_table1_rural <- xtable(table1_rural_dt)
+main_table1_rural
+
+#sd table (to manually input to table 1)
+row_list_sd_rural <- list(sd_mon_row_main,
+                    sd_PM25_row_main,
+                    sd_modelPM25_row_main,
+                    sd_popden_main,
+                    sd_hhinc_main)
+table_1_sd_rural <- do.call(rbind,row_list_sd_rural)
+row.names(table_1_sd_rural) <- c("SD Mean Monitor Count",
+                           "SD Monitor PM2.5",
+                        "SD Model PM2.5",
+                        "Population Density",
+                        "HH Income")
+table1_sd_rural <- setDT(table_1_sd_rural)
+main_table_sd_rural <- xtable(table1_sd_rural)
+main_table_sd_rural
+```
+
+I manually joined the two (all counties and rural counties) and just messed with the formatting in LaTeX a bit to make it all into one table. :)
+
+##3.4 Line graphs showing PM2.5 declines (monitor/model) by US state; 3 year Moving Averages
+
+July 7 update: One major issue is that the Bolded Averaged line not showing up in legend; still need to figure out how to make a custom item in legend. Another major issues is that I need to figure out how to format both graphs (AI/non-AI) side by side for monitor and model data, with a common legend, in one plot.
+
+August 4 update: Attempt to customize plots to have multiple legends to account for bolded black averaged decline line!
+August 5 update: Example code to add multiple legend (source: https://stackoverflow.com/questions/52060601/ggplot-multiple-legends-arrangement)
+
+###3.4.1 Monitor Data
+
+####3.4.1.1 AI counties: monitor data
+
+```{r}
+# Read in state FIPS dataset
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+state_fips <- read_csv("state_fips.csv")
+state_fips <- state_fips %>% dplyr::select(State_Name, State)
+
+# Native counties (monitor)
+native_ctyear_exp <- all_ctyear_exp %>% filter(county_type == 1)
+# Join with data to get state acronyms
+native_ctyear_exp <- native_ctyear_exp %>% 
+  dplyr::select(County, year, annual_mean_all, State)
+native_ctyear_exp$year <- as.factor(native_ctyear_exp$year)
+unique(native_ctyear_exp$State_Name)
+native_ctyear_exp <- native_ctyear_exp %>% inner_join(state_fips)
+native_ctyear_exp
+# Aggregate to get an average exposure for each state per year
+native_ctyear_exp <- aggregate(annual_mean_all~year+State_Name,
+          data=native_ctyear_exp,
+          FUN=mean)
+native_ctyear_exp 
+#3 year moving avg
+#separate df by state FIPS and rbind back
+state_analysis <- list() #empty list for county
+native_state_exp <- unique(native_ctyear_exp$State_Name)
+native_exp_final <- data.frame() #empty df to rbind list items into
+library(stats)
+for (i in 1:length(native_state_exp)){
+  #separate df by state
+  state_analysis[[i]] <- native_ctyear_exp %>%
+    filter(State_Name == native_state_exp[i])
+  #new col of moving averages
+  state_analysis[[i]] <- state_analysis[[i]] %>%
+    group_by(year) %>%
+    arrange(year) 
+  #new column for moving averages
+  state_analysis[[i]]$movave <- (state_analysis[[i]]$annual_mean_all + 
+                                    lag(state_analysis[[i]]$annual_mean_all) + 
+                                    lag(state_analysis[[i]]$annual_mean_all,2))/3
+  #fill first year entry with just first year entry
+  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$annual_mean_all[1]
+  #fill second year with avg from first and second year
+  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$annual_mean_all[1],
+                                           state_analysis[[i]]$annual_mean_all[2]))
+  #rebind df
+  native_exp_final <- do.call(rbind, state_analysis)
+}
+
+native_exp_final 
+native_exp_final$year <- substr(native_exp_final$year, 3, 4)
+native_exp_final$year <- as.factor(native_exp_final$year)
+#fill in NAs in movave column; have first year be the first year, 2nd year be 2 year moving avg
+native_exp_final$county_type <- "American Indian"
+
+# df for average decline, to join with table
+native_avgdec <- aggregate(annual_mean_all~year,
+          data=native_exp_final,
+          FUN=mean)
+native_avgdec$movave <- (native_avgdec$annual_mean_all + 
+                                  lag(native_avgdec$annual_mean_all) + 
+                                  lag(native_avgdec$annual_mean_all,2))/3
+native_avgdec[1,"movave"] <- native_avgdec$annual_mean_all[1]
+#fill second year with avg from first and second year
+native_avgdec[2,"movave"] <- mean(c(native_avgdec$annual_mean_all[1],
+                                    native_avgdec$annual_mean_all[2]))
+
+# dummy columns
+native_avgdec$State_Name <- "Average Concentration across all States"
+native_avgdec$county_type <- "American Indian"
+native_avgdec <- native_avgdec %>% dplyr::select(year, State_Name, annual_mean_all, movave, county_type)
+# make list with both df
+dplyr::bind_rows(native_exp_final,native_avgdec)
+
+# PLOT
+native_exp_plot_movavg <- ggplot() + 
+  geom_line(data = native_exp_final,
+            aes(x=year, y = movave,
+                group = State_Name, colour= State_Name)) +
+  geom_line(data=native_avgdec,
+            aes(x=year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25) +
+  ylim(0,20) +
+  ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
+  labs(title = "AI Populated Counties",
+       x = "Year") + theme_linedraw()  
+native_exp_plot_movavg 
+```
+
+#### 8/5 Updated Plot with Multiple Legends
+```{r}
+# PLOT with separate legends
+# og plot, no legend
+p1 <- ggplot() + 
+  geom_line(data = native_exp_final,
+            aes(x=year, y = movave,
+                group = State_Name, colour= State_Name)) + theme_linedraw() +
+  geom_line(data=native_avgdec,
+            aes(x=year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25) +
+  ylim(0,20) +
+  ylab(expression(paste("Mean Measured ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  labs(title = "A",
+       x = "Year") + 
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14))  + theme(legend.position="None")
+
+# # first plot all states
+# states_only <- ggplot() + 
+#   geom_line(data = native_exp_final,
+#             aes(x=year, y = movave,
+#                 group = State_Name, colour= State_Name)) +
+#   ylim(0,20) +
+#   ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
+#   labs(title = "AI Populated Counties",
+#        x = "Year") + theme_linedraw()  + theme(legend.title=element_blank())
+# 
+# avgdec_only <- ggplot() +
+#   geom_line(data=native_avgdec,
+#             aes(x=year, y=movave,
+#                 group=State_Name, lty="Overall Mean"),
+#             color="black",
+#             size = 1.25) + 
+#   ylim(0,20) +
+#   ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
+#   labs(title = "AI Populated Counties",
+#        x = "Year") + theme_linedraw() + theme(legend.title=element_blank())
+# 
+# # get legends
+# states_leg <- get_legend(states_only)
+# avgdec_leg <- get_legend(avgdec_only)
+# # create blank plot for legend alignment
+# blank_p <- plot_spacer() + theme_void()
+# 
+# # combine legends
+# leg12 <- plot_grid(states_leg, avgdec_leg,
+#                    blank_p, 
+#                    ncol = 2)
+# leg12
+# 
+# final_p <- plot_grid(p0,
+#                      leg12,
+#                      nrow = 1,
+#                      align = "h",
+#                      axis = "t",
+#                      rel_widths = c(1, 0.3)
+# )
+
+# FOR PAPER: want just the plot, no legend
+p1
+```
+
+####3.4.1.2 Non-AI Counties
+```{r}
+# Non-native counties (monitor)
+nonnative_ctyear_exp <- all_ctyear_exp %>% filter(county_type == 0)
+# Join with data to get state acronyms
+nonnative_ctyear_exp <- nonnative_ctyear_exp %>% 
+  dplyr::select(County, year, annual_mean_all, State)
+nonnative_ctyear_exp$year <- as.factor(nonnative_ctyear_exp$year)
+unique(nonnative_ctyear_exp$State_Name)
+nonnative_ctyear_exp <- nonnative_ctyear_exp %>% inner_join(state_fips)
+nonnative_ctyear_exp
+# Aggregate to get an average exposure for each state per year
+nonnative_ctyear_exp <- aggregate(annual_mean_all~year+State_Name,
+          data=nonnative_ctyear_exp,
+          FUN=mean)
+nonnative_ctyear_exp 
+#3 year moving avg
+#separate df by state FIPS and rbind back
+state_analysis <- list() #empty list for county
+nonnative_state_exp <- unique(nonnative_ctyear_exp$State_Name)
+nonnative_exp_final <- data.frame() #empty df to rbind list items into
+library(stats)
+for (i in 1:length(nonnative_state_exp)){
+  #separate df by state
+  state_analysis[[i]] <- nonnative_ctyear_exp %>%
+    filter(State_Name == nonnative_state_exp[i])
+  #new col of moving averages
+  state_analysis[[i]] <- state_analysis[[i]] %>%
+    group_by(year) %>%
+    arrange(year) 
+  #new column for moving averages
+  state_analysis[[i]]$movave <- (state_analysis[[i]]$annual_mean_all + 
+                                    lag(state_analysis[[i]]$annual_mean_all) + 
+                                    lag(state_analysis[[i]]$annual_mean_all,2))/3
+  #fill first year entry with just first year entry
+  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$annual_mean_all[1]
+  #fill second year with avg from first and second year
+  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$annual_mean_all[1],
+                                           state_analysis[[i]]$annual_mean_all[2]))
+  #rebind df
+  nonnative_exp_final <- do.call(rbind, state_analysis)
+}
+
+nonnative_exp_final 
+nonnative_exp_final$year <- substr(nonnative_exp_final$year, 3, 4)
+nonnative_exp_final$year <- as.factor(nonnative_exp_final$year)
+#fill in NAs in movave column; have first year be the first year, 2nd year be 2 year moving avg
+nonnative_exp_final$county_type <- "Non-American Indian"
+
+# df for average decline, to join with table
+nonnative_avgdec <- aggregate(annual_mean_all~year,
+          data=nonnative_exp_final,
+          FUN=mean)
+nonnative_avgdec$movave <- (nonnative_avgdec$annual_mean_all + 
+                                  lag(nonnative_avgdec$annual_mean_all) + 
+                                  lag(nonnative_avgdec$annual_mean_all,2))/3
+nonnative_avgdec[1,"movave"] <- nonnative_avgdec$annual_mean_all[1]
+#fill second year with avg from first and second year
+nonnative_avgdec[2,"movave"] <- mean(c(nonnative_avgdec$annual_mean_all[1],
+                                    nonnative_avgdec$annual_mean_all[2]))
+
+# dummy columns
+nonnative_avgdec$State_Name <- "Average Concentration across all States"
+nonnative_avgdec$county_type <- "Non-American Indian"
+nonnative_avgdec <- nonnative_avgdec %>% dplyr::select(year, State_Name, annual_mean_all, movave, county_type)
+nonnative_avgdec
+
+nonnative_exp_plot_movavg <- ggplot() + 
+  geom_line(data = nonnative_exp_final,
+            aes(x=year, y = movave,
+                group = State_Name, colour= State_Name)) +
+  geom_line(data=nonnative_avgdec,
+            aes(x=year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25)+
+  ylim(0,20) +
+  ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
+  labs(title = "Non-AI Populated Counties",
+       x = "Year") + theme_linedraw() 
+boop <- nonnative_exp_plot_movavg + theme(legend.position="None") #get rid of legend to plot both graphs in the same screen
+native_exp_plot_movavg 
+
+# Plot both on the same screen
+library(gridExtra)
+grid.arrange(native_exp_plot_movavg, boop, nrow=1)
+```
+
+#### 8/5 Updated Plot with Multiple Legends
+```{r}
+# PLOT with separate legends
+# og plot, no legend
+p2 <- ggplot() + 
+  geom_line(data = nonnative_exp_final,
+            aes(x=year, y = movave,
+                group = State_Name, colour= State_Name)) + theme_linedraw() +
+  geom_line(data=nonnative_avgdec,
+            aes(x=year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25) +
+  ylim(0,20) +
+  ylab(expression(paste("Mean Measured ", PM[2.5],  " (", mu, "g/", m^3, ")"))) +
+  labs(title = "B",
+       x = "Year") + 
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) + theme(legend.position="None")
+
+# first plot all states
+states_only <- ggplot() + 
+  geom_line(data = nonnative_exp_final,
+            aes(x=year, y = movave,
+                group = State_Name, colour= State_Name)) +
+  ylim(0,20) +
+  ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
+  labs(title = "Non-AI Populated Counties",
+       x = "Year") + theme_linedraw()  + theme(legend.title=element_blank())
+
+avgdec_only <- ggplot() +
+  geom_line(data=nonnative_avgdec,
+            aes(x=year, y=movave,
+                group=State_Name, lty="Overall Mean"),
+            color="black",
+            size = 1.25) + 
+  ylim(0,20) +
+  ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
+  labs(title = "Non-AI Populated Counties",
+       x = "Year") + theme_linedraw() + theme(legend.title=element_blank())
+
+# get legends
+states_leg <- get_legend(states_only)
+avgdec_leg <- get_legend(avgdec_only)
+
+# combine legends
+leg12 <- plot_grid(states_leg, avgdec_leg, nrow = 1)
+leg12
+
+# # plot together
+# final_p <- plot_grid(p0,
+#                      leg12)
+# final_p
+
+# FOR PAPER: save plot without legend, and legend, separately :)
+p2
+leg12
+```
+
+###3.4.2 Model Data
+####3.4.2.1 AI Counties
+```{r}
+# Full model pm2.5 dataset
+model_PM25
+# Separate out data of just native counties:
+native_modelpm <- model_PM25 %>% filter(county_type == 1) %>% 
+  dplyr::rename(Year = year)
+# Join with data to get state acronyms
+native_modelpm <- native_modelpm %>% 
+  dplyr::select(County, Year, PM25, State)
+native_modelpm <- native_modelpm %>% inner_join(state_fips)
+native_modelpm
+# Aggregate to get an average exposure for each state per Year
+native_modelpm <- aggregate(PM25~Year+State_Name,
+          data=native_modelpm,
+          FUN=mean)
+native_modelpm 
+#3 Year moving avg
+#separate df by state FIPS and rbind back
+state_analysis <- list() #empty list for county
+native_state_exp <- unique(native_modelpm$State_Name)
+native_exp_final <- data.frame() #empty df to rbind list items into
+library(stats)
+for (i in 1:length(native_state_exp)){
+  #separate df by state
+  state_analysis[[i]] <- native_modelpm %>%
+    filter(State_Name == native_state_exp[i])
+  #new col of moving averages
+  state_analysis[[i]] <- state_analysis[[i]] %>%
+    group_by(Year) %>%
+    arrange(Year) 
+  #new column for moving averages
+  state_analysis[[i]]$movave <- (state_analysis[[i]]$PM25 + 
+                                    lag(state_analysis[[i]]$PM25) + 
+                                    lag(state_analysis[[i]]$PM25,2))/3
+  #fill first Year entry with just first Year entry
+  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$PM25[1]
+  #fill second Year with avg from first and second Year
+  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$PM25[1],
+                                           state_analysis[[i]]$PM25[2]))
+  #rebind df
+  native_modelpm_final <- do.call(rbind, state_analysis)
+}
+
+native_modelpm_final
+native_modelpm_final$Year <- substr(native_modelpm_final$Year, 3, 4)
+native_modelpm_final$Year <- as.factor(native_modelpm_final$Year)
+#fill in NAs in movave column; have first Year be the first Year, 2nd Year be 2 Year moving avg
+native_modelpm_final$county_type <- "American Indian"
+
+# df for average decline, to join with table
+native_avgdec_model <- aggregate(PM25~Year,
+          data=native_modelpm_final,
+          FUN=mean)
+native_avgdec_model$movave <- (native_avgdec_model$PM25 + 
+                                  lag(native_avgdec_model$PM25) + 
+                                  lag(native_avgdec_model$PM25,2))/3
+native_avgdec_model[1,"movave"] <- native_avgdec_model$PM25[1]
+#fill second Year with avg from first and second Year
+native_avgdec_model[2,"movave"] <- mean(c(native_avgdec_model$PM25[1],
+                                    native_avgdec_model$PM25[2]))
+
+# dummy columns
+native_avgdec_model$State_Name <- "Average Concentration across all States"
+native_avgdec_model$county_type <- "American Indian"
+native_avgdec_model <- native_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
+# make list with both df
+dplyr::bind_rows(native_modelpm_final,native_avgdec_model)
+
+native_model_movavg <- ggplot() + 
+  geom_line(data = native_modelpm_final,
+            aes(x=Year, y = movave,
+                group = State_Name, colour= State_Name)) +
+  geom_line(data=native_avgdec_model,
+            aes(x=Year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25) +
+  ylim(0,20) +
+  ylab(expression(paste("Annual ", PM[2.5], " Model Concentrations", " (", mu, "g/", m^3, ")"))) +
+  labs(title = "AI Populated Counties",
+       x = "Year") + theme_linedraw()  + theme(legend.position="None")
+native_model_movavg 
+```
+
+#### 8/5 Updated Plot with Multiple Legends
+```{r}
+# PLOT with separate legends
+# og plot, no legend
+p3 <- ggplot() + 
+  geom_line(data = native_modelpm_final,
+            aes(x=Year, y = movave,
+                group = State_Name, colour= State_Name)) +
+  geom_line(data=native_avgdec_model,
+            aes(x=Year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25) + theme_linedraw() +
+  ylim(0,20) +
+  ylab(expression(paste("Mean Modeled ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  labs(title = "C",
+       x = "Year") + 
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14))  + theme(legend.position="None")
+
+# FOR PAPER: want just the plot, no legend
+p3
+```
+
+####3.4.2.2 Non-AI Counties
+```{r}
+# Separate out data of non-native counties:
+nonnative_modelpm <- model_PM25 %>% filter(county_type == 0)
+# Join with data to get state acronyms
+nonnative_modelpm <- nonnative_modelpm %>% 
+  dplyr::select(County, Year, PM25, State)
+nonnative_modelpm <- nonnative_modelpm %>% inner_join(state_fips)
+nonnative_modelpm
+# Aggregate to get an average exposure for each state per Year
+nonnative_modelpm <- aggregate(PM25~Year+State_Name,
+          data=nonnative_modelpm,
+          FUN=mean)
+nonnative_modelpm 
+#3 Year moving avg
+#separate df by state FIPS and rbind back
+state_analysis <- list() #empty list for county
+nonnative_state_exp <- unique(nonnative_modelpm$State_Name)
+nonnative_exp_final <- data.frame() #empty df to rbind list items into
+library(stats)
+for (i in 1:length(nonnative_state_exp)){
+  #separate df by state
+  state_analysis[[i]] <- nonnative_modelpm %>%
+    filter(State_Name == nonnative_state_exp[i])
+  #new col of moving averages
+  state_analysis[[i]] <- state_analysis[[i]] %>%
+    group_by(Year) %>%
+    arrange(Year) 
+  #new column for moving averages
+  state_analysis[[i]]$movave <- (state_analysis[[i]]$PM25 + 
+                                    lag(state_analysis[[i]]$PM25) + 
+                                    lag(state_analysis[[i]]$PM25,2))/3
+  #fill first Year entry with just first Year entry
+  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$PM25[1]
+  #fill second Year with avg from first and second Year
+  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$PM25[1],
+                                           state_analysis[[i]]$PM25[2]))
+  #rebind df
+  nonnative_modelpm_final <- do.call(rbind, state_analysis)
+}
+
+nonnative_modelpm_final
+nonnative_modelpm_final$Year <- substr(nonnative_modelpm_final$Year, 3, 4)
+nonnative_modelpm_final$Year <- as.factor(nonnative_modelpm_final$Year)
+#fill in NAs in movave column; have first Year be the first Year, 2nd Year be 2 Year moving avg
+nonnative_modelpm_final$county_type <- "American Indian"
+
+# df for average decline, to join with table
+nonnative_avgdec_model <- aggregate(PM25~Year,
+          data=nonnative_modelpm_final,
+          FUN=mean)
+nonnative_avgdec_model$movave <- (nonnative_avgdec_model$PM25 + 
+                                  lag(nonnative_avgdec_model$PM25) + 
+                                  lag(nonnative_avgdec_model$PM25,2))/3
+nonnative_avgdec_model[1,"movave"] <- nonnative_avgdec_model$PM25[1]
+#fill second Year with avg from first and second Year
+nonnative_avgdec_model[2,"movave"] <- mean(c(nonnative_avgdec_model$PM25[1],
+                                    nonnative_avgdec_model$PM25[2]))
+
+# dummy columns
+nonnative_avgdec_model$State_Name <- "Average Concentration across all States"
+nonnative_avgdec_model$county_type <- "American Indian"
+nonnative_avgdec_model <- nonnative_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
+# make list with both df
+dplyr::bind_rows(nonnative_modelpm_final,nonnative_avgdec_model)
+
+nonnative_model_movavg <- ggplot() + 
+  geom_line(data = nonnative_modelpm_final,
+            aes(x=Year, y = movave,
+                group = State_Name, colour= State_Name)) +
+  geom_line(data=nonnative_avgdec_model,
+            aes(x=Year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25) +
+  ylim(0,20) +
+  ylab(expression(paste("Annual ", PM[2.5], " Model Concentrations", " (", mu, "g/", m^3, ")"))) +
+  labs(title = "Non-AI Populated Counties",
+       x = "Year") + theme_linedraw()
+nonnative_model_movavg 
+boop_model <- nonnative_model_movavg + theme(legend.position="None") #get rid of legend to plot both graphs in the same screen
+native_model_movavg
+
+# Plot both on the same screen
+library(gridExtra)
+grid.arrange(native_model_movavg, boop_model, nrow=1)
+```
+
+#### 8/5 Updated Plot with Multiple Legends
+```{r}
+# PLOT with separate legends
+# og plot, no legend
+p4 <- ggplot() + 
+  geom_line(data = nonnative_modelpm_final,
+            aes(x=Year, y = movave,
+                group = State_Name, colour= State_Name)) + theme_linedraw() +
+  geom_line(data=nonnative_avgdec_model,
+            aes(x=Year, y=movave,
+                group=State_Name),
+            color="black",
+            size = 1.25) +
+  ylim(0,20) +
+  ylab(expression(paste("Mean Modeled ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  labs(title = "D",
+       x = "Year")  + 
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14))  + theme(legend.position="None")
+
+# FOR PAPER: just need plot
+p4
+```
+
+## 3.5 Descriptive Map of all the AI Counties
+
+### 3.5.1 Define AI counties as an sp file, by joining county lists of all 3 classifications with a county shapefile
+```{r}
+#map all native counties; to get sense of location to compare to monitor coverage
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+counties <- rgdal::readOGR("cb_2018_us_county_500k/cb_2018_us_county_500k.shp")
+summary(counties)
+
+#census
+census_counties <- census %>%
+  dplyr::rename(GEOID = County)
+census_counties$State <- substr(census_counties$GEOID, 0, 2)
+census_counties$State <- as.numeric(census_counties$State)
+census_counties <- census_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+census_counties
+census_shp <- merge(counties, census_counties, by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(census_counties$GEOID)
+length(census_shp$GEOID) #excludes 1 county
+
+#cluster
+cluster_counties <- cluster %>%
+  dplyr::rename(GEOID = County)
+cluster_counties$State <- substr(cluster_counties$GEOID, 0, 2)
+cluster_counties$State <- as.numeric(as.character(cluster_counties$State))
+cluster_counties <- cluster_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+cluster_counties
+cluster_shp <- merge(counties, cluster_counties, by = 'GEOID', 
+                     all = FALSE, duplicateGeoms = TRUE)
+summary(cluster_shp)
+length(cluster_counties$GEOID)
+length(cluster_shp$GEOID) 
+
+#reservation
+reservation_counties <- reservation %>% dplyr::rename(GEOID = County)
+reservation_counties$State <- substr(reservation_counties$GEOID, 0, 2)
+reservation_counties$State <- as.numeric(reservation_counties$State)
+reservation_counties <- reservation_counties %>% 
+  filter(State <= 56,
+         State != 2,
+         State != 15) 
+unique(reservation_counties$GEOID)
+reservation_shp <- merge(counties, reservation_counties, by = 'GEOID', 
+                 all = FALSE, duplicateGeoms = TRUE)
+length(reservation_counties$GEOID)
+length(reservation_shp$GEOID) 
+```
+
+### 3.5.2 Define monitor locations on AI counties to include in map
+
+I differentiated between monitors active for 1-10 years and 11-19 years.
+**July 30 update:** Plotted all PM2.5 monitors as just black points (rather than differentiating between monitors active for less than half or half or greater study years) so this section is commented out
+
+```{r}
+all_native_counties #recall df of distinct AI-classified counties
+
+active_native_mon <- list(length(PM25_all))
+for (i in 1:length(PM25_all)){
+  active_native_mon[[i]] <- inner_join(PM25_all[[i]], all_native_counties)
+}
+agg_native_mon <- do.call(rbind, active_native_mon)
+agg_native_mon # df of any active monitors across all study years
+# 
+# #filter by less than half or more than half of study years active
+# agg_native_mon <- agg_native_mon %>% 
+#   dplyr::select(-annual_mean)
+# agg_native_mon <- agg_native_mon %>% dplyr::count(County, Latitude, Longitude) #new column n counts how many years each monitor (denoted by lat lon) is active
+# agg_native_mon <- agg_native_mon %>% mutate(active = case_when(
+#   n <= 10 ~ "1",
+#   n > 10 ~ "2"
+# )) #new column 'active' denotes monitors active for 1-10 years (active = 1) and those that are active for 11-19 years (active = 2)
+# agg_native_mon
+# agg_native_mon$State <- substr(agg_native_mon$County, 0, 2)
+# #need to recode State as numeric, for random effects
+# agg_native_mon$State <- as.numeric(agg_native_mon$State)
+# #filter out territories, AL and HI
+# agg_native_mon <- agg_native_mon %>% filter(State <= 56,
+#                                       State != 2,
+#                                       State != 15)
+# view(agg_native_mon) #check that 'active' column should have entry 1 if 'n' column is less than or equal to 10, entry 2 if 'n' column greater than 10
+```
+
+### 3.5.3 Map counties and monitor locations in Leaflet
+
+Note: I'll probably end up mapping it in ggplot2 for the paper, so this is just a placeholder figure in the manuscript, just to make sure counties are showing up correctly.
+
+8/5 Update: Map of native counties and ALL PM2.5 monitors
+```{r}
+all_monitors <- do.call(rbind, PM25_all)
+all_unique_mon <- unique(all_monitors[c("Latitude", "Longitude")])
+# some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+labels <- c("Native Census Population >5% County", 
+                      "Rural Wallace et al. Cluster",
+                      "County within Reservation",
+            "PM2.5 Monitor")
+sizes <- c(10, 10, 10, 5)
+shapes <- c("square", "square", "square", "circle")
+borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+                           position = "topright"))}
+native_allmon_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = census_shp, color = "#8dd3c7",
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = cluster_shp, color = "#ffffb3", 
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = reservation_shp, color = "#fb8072",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "American Indian Populated Counties") %>%
+  addCircleMarkers(data = all_unique_mon,
+                   lng = ~Longitude,
+                   lat = ~Latitude,
+                   radius = 1.5,
+                   stroke = FALSE, fillOpacity = 0.85,
+                   color = "black")
+native_allmon_map
+```
+
+
+Map of native counties and only PM2.5 monitors in native counties
+```{r}
+# some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+labels <- c("Native Census Population >5% County", 
+                      "Rural Wallace et al. Cluster",
+                      "County within Reservation",
+            "PM2.5 Monitor")
+sizes <- c(10, 10, 10, 5)
+shapes <- c("square", "square", "square", "circle")
+borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+                           position = "topright"))}
+native_counties_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = census_shp, color = "#8dd3c7",
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = cluster_shp, color = "#ffffb3", 
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = reservation_shp, color = "#fb8072",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "American Indian Populated Counties") %>%
+  addCircleMarkers(data = agg_native_mon,
+                   lng = ~Longitude,
+                   lat = ~Latitude,
+                   radius = 1.5,
+                   stroke = FALSE, fillOpacity = 0.85,
+                   color = "black")
+native_counties_map
+```
+
+Old code for differentiating between monitors active for less than half or greater than or equal than half of study years below:
+```{r}
+# # make palette for monitor colors based on years active status
+# activeyrs_pal <- colorFactor(c("#80b1d3", "#fdb462"), domain = c("1", "2"))
+# pal_native_mon <- colorNumeric(
+#   palette = "inferno", 
+#   domain = agg_native_mon$n,
+#   reverse = TRUE)
+# 
+# # some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#80b1d3", "#fdb462")
+# labels <- c("Native Census Population >5% County", 
+#                       "Rural Wallace et al. Cluster",
+#                       "County within Reservation",
+#             "Monitors Active Less than or Equal to Half of Study Years",
+#               "Monitors Active Greater than Half of Years")
+# sizes <- c(10, 10, 10, 5, 5)
+# shapes <- c("square", "square", "square", "circle", "circle")
+# borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#80b1d3", "#fdb462")
+# addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+#           make_shapes <- function(colors, sizes, borders, shapes) {
+#               shapes <- gsub("circle", "50%", shapes)
+#               shapes <- gsub("square", "0%", shapes)
+#               paste0(colors, "; width:", sizes, "px; height:", sizes, 
+#                      "px; border:3px solid ", borders, "; border-radius:", shapes)
+#           }
+#           make_labels <- function(sizes, labels) {
+#               paste0("<div style='display: inline-block;height: ", 
+#                      sizes, "px;margin-top: 4px;line-height: ", 
+#                      sizes, "px;'>", labels, "</div>")
+#           }
+# 
+#           legend_colors <- make_shapes(colors, sizes, borders, shapes)
+#           legend_labels <- make_labels(sizes, labels)
+# 
+#           return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+#                            position = "bottomleft"))}
+# native_counties_map <- leaflet() %>%
+#   addProviderTiles(providers$CartoDB.Positron) %>%
+#   addPolygons(data = census_shp, color = "#8dd3c7",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = cluster_shp, color = "#ffffb3", 
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = reservation_shp, color = "#fb8072",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addLegendCustom(colors, labels, sizes, shapes, borders,
+#                   title = "American Indian Populated Counties") %>%
+#   addCircleMarkers(data = agg_native_mon,
+#                    lng = ~Longitude,
+#                    lat = ~Latitude,
+#                    radius = 3,
+#                    stroke = FALSE, fillOpacity = 0.85,
+#                    color = ~activeyrs_pal(agg_native_mon$active))
+# native_counties_map
+```
+###3.5.4 Map with just counties locations (no monitors)
+
+```{r}
+# some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#8dd3c7",  "#ffffb3", "#fb8072")
+labels <- c("Native Census Population >5% County", 
+                      "Rural Wallace et al. Cluster",
+                      "County within Reservation")
+sizes <- c(10, 10, 10)
+shapes <- c("square", "square", "square")
+borders <- c("#8dd3c7",  "#ffffb3", "#fb8072")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+                           position = "bottomright"))}
+no_monitors_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = census_shp, color = "#8dd3c7",
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = cluster_shp, color = "#ffffb3", 
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = reservation_shp, color = "#fb8072",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "American Indian Populated Counties")
+no_monitors_map
+```
+
+#PART 4: STATISTICAL ANALYSIS
+
+##4.1 Linear Mixed Effects Model for Outcome = Monitor and Model PM2.5 concentrations
+
+###4.1.0 Define lmer function
+I am defining functions to run the following linear mixed regressions on the data, testing main effects only:
+-Model 1: Crude (AI/Non-AI and Year only)
+-Model 2: Partial (further adjusted for population density)
+-Model 3: Full (further adjusted for both pop density and HH income)
+
+I also run Model 3 to test for an interaction effect between AI/Non-AI classification and year.
+-Model 3X: Full model with interaction term for county_type*year
+
+```{r}
+#Define referent category for binary "exposure" variable county_type
+# Main Analysis:
+all_ctyear_exp$county_type <- relevel(all_ctyear_exp$county_type,
+                                         ref = "0")
+
+# Check linearity of year, hh_inc, pop_density thru penalized spline
+# Model with spline
+library(mgcv)
+# all models without pop density have small standard errors
+gamm.eg <- gamm(annual_mean_all ~ county_type +
+                  s(I(scale(hh_income))) + s(I(as.numeric(popd_q))) +
+                  s(I(as.numeric(as.character(year))-2000)),
+                random = list(State = ~1),
+                      data = all_ctyear_exp)
+
+summary(gamm.eg$gam)
+plot(gamm.eg$gam, pages=1) #population density and HH income are non-linear, so we adjust for them using deciles
+
+# Define functions for lmer
+# Crude model only adjusting for county_type and year
+detrend_lmer_crude <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    (1|State/County),
+                  data = data)
+  return(exp_lme)}
+
+# Partial model, adjusted for popd
+detrend_lmer_partial <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    popd_q +
+                    (1|State/County),
+                  data = data)
+  return(exp_lme)}
+# Full model with year as categorical variable
+detrend_lmer_full <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/County),
+                  data = data, REML=FALSE)
+  return(exp_lme)}
+
+# Full model with year as categorical variable, interx between year and native 
+detrend_lmer_full_catyr_intx <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    popd_q + 
+                    hhinc_q +
+                    county_type*year +
+                    (1|State/County),
+                  data = data, REML=FALSE)
+  return(exp_lme)}
+```
+
+###4.1.1 Monitor Data: Run regressions for main analysis (all counties) and sensitivity analysis (rural counties)
+
+####4.1.1.1 Main Analysis
+```{r}
+# Crude
+summary(detrend_lmer_crude(all_ctyear_exp))
+# Partial
+summary(detrend_lmer_partial(all_ctyear_exp))
+# Full
+summary
+# Full w/ InterX
+summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))
+
+# Model Output Table with three columns for crude, , full
+stargazer(detrend_lmer_crude(all_ctyear_exp),
+          detrend_lmer_partial(all_ctyear_exp),
+          detrend_lmer_full(all_ctyear_exp),
+          ci=T)
+```
+
+####4.1.1.2 Rural Counties; Sensitivity Analysis
+```{r}
+# subset rural counties
+rural_monitors <- all_ctyear_exp %>% filter(as.numeric(as.factor(land_use)) >=4)
+
+#Run on Monitor Data for rural counties
+summary(detrend_lmer_full(rural_monitors))
+summary(detrend_lmer_partial(rural_monitors))
+summary(detrend_lmer_crude(rural_monitors))
+
+#output latex table
+stargazer(detrend_lmer_crude(rural_monitors),ci=T)
+```
+
+####4.1.1.3 Plot time-varying effect of AI/Non-AI county type binary variable (county_type interaction effect with year)
+
+Creating Variance-Covariance Matrices, Plotting model PM2.5 declines over time
+
+I first create a variance-covariance matrix to pull out all of the variances for all of the study years after 2000:
+var(x+y) = var(x) + var(y) + 2*covar(x,y) where x = main effect of native county type on PM2.5 concnetrations in 2000 (referent), y = main effect of native county type due to interaction with time in study years 2001-2018
+
+Then I create a new data frame, pm_decline_monitor_all, which saves all of the total effect estimates (main effect + interaction effect) and their 95% confidence intervals. I use a loop to iterate through all the study years to fill in this table. Then I can graph this!
+
+#####4.1.1.3.1 All Main Analysis Counties
+
+```{r}
+# Year as a categorical variable
+# vcov matrix of main effects and interX
+summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))
+native_yr_vcov <- vcov(detrend_lmer_full_catyr_intx(all_ctyear_exp))[c(2,seq(39,56)), c(2,seq(39,56))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+var_vector
+sd_vector <- sqrt(var_vector)
+length(sd_vector)
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_monitor_all <- data.frame()
+pm_decline_monitor_all[1,1] <- summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[2,1]
+pm_decline_monitor_all[1,2] <- summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[2,1] - sd_vector[1]
+pm_decline_monitor_all[1,3] <- summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_monitor_all[i,1] <- summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[yr_ct,1]
+  
+  pm_decline_monitor_all[i,2] <- summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[yr_ct,1] - sd_vector[i]
+  
+  pm_decline_monitor_all[i,3] <- summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+
+pm_decline_monitor_all
+
+colnames(pm_decline_monitor_all) <- c('estimate', 'cl_lower', 'cl_upper') # set col names
+
+pm_decline_monitor_all$year <- seq(2000, 2018) # column for year
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+monitor_interx_plot <- ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_monitor_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_monitor_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+  geom_line(data=pm_decline_monitor_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  labs(title = expression(paste("Measured ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties")),
+       x = "Year",
+       y = expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")")),
+       fill = "County Type") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) +
+  geom_hline(yintercept=0, linetype="solid", color = "red")
+monitor_interx_plot
+```
+
+#####4.1.1.3.2 Rural Main Analysis Counties
+```{r}
+# Year as a categorical variable
+# vcov matrix for all year combinations with native county type (one less p bc one less pop density top quantile category variable)
+summary(detrend_lmer_full_catyr_intx(rural_monitors))
+native_yr_vcov <- vcov(detrend_lmer_full_catyr_intx(rural_monitors))[c(2,seq(38,55)), c(2,seq(38,55))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+var_vector
+sd_vector <- sqrt(var_vector)
+length(sd_vector)
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+
+pm_decline_monitor_rural <- data.frame()
+pm_decline_monitor_rural[1,1] <- summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[2,1]
+pm_decline_monitor_rural[1,2] <- summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[2,1] - sd_vector[1]
+pm_decline_monitor_rural[1,3] <- summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 38
+for (i in 2:19){
+  pm_decline_monitor_rural[i,1] <- summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[yr_ct,1]
+  pm_decline_monitor_rural[i,2] <- summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[yr_ct,1] - sd_vector[i]
+  pm_decline_monitor_rural[i,3] <- summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(rural_monitors))$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+pm_decline_monitor_rural
+# set col names
+colnames(pm_decline_monitor_rural) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_monitor_rural$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+monitor_interx_rural <- ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_monitor_rural,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_monitor_rural,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_monitor_rural,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  ggtitle(expression(paste("Measured ", PM[2.5], " Difference in Rural AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+monitor_interx_rural 
+```
+
+
+###4.1.2 Model Data: Run regressions for main analysis (all counties) and sensitivity analysis (rural counties)
+
+####4.1.2.1 Main Analysis
+
+```{r}
+# Split population density and hhincome into deciles for model
+model_PM25$popd_q <- cut(model_PM25$pop_density, quantile(model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+model_PM25$hhinc_q <- cut(model_PM25$hh_income, quantile(model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+model_PM25
+sum(table(model_PM25$popd_q, exclude = NULL)) == dim(model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+model_PM25$county_type <- as.factor(as.character(model_PM25$county_type))
+
+  # set referent
+model_PM25$county_type <- relevel(model_PM25$county_type,
+                                         ref = "0")
+model_PM25$Year <- as.factor(model_PM25$Year)
+model_PM25 <- dplyr::rename(model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+model_lmer <-  dplyr::rename(model_PM25,annual_mean_all=PM25)
+
+# Run LMER (crude, partial, adjusted)
+summary(detrend_lmer_crude(model_lmer))
+summary(detrend_lmer_partial(model_lmer))
+summary(detrend_lmer_full(model_lmer))
+
+# All Models output table
+stargazer(detrend_lmer_crude(model_lmer),
+          detrend_lmer_partial(model_lmer),
+          detrend_lmer_full(model_lmer),
+          ci=T)
+```
+
+####4.1.2.2 Rural Counties; Sensitivity Analysis
+```{r}
+# subset rural counties
+rural_model <- model_lmer %>% filter(as.numeric(as.factor(land_use)) >=4)
+rural_model
+#Run on Model Data for rural counties
+summary(detrend_lmer_full(rural_model))
+summary(detrend_lmer_partial(rural_model))
+summary(detrend_lmer_crude(rural_model))
+
+#output latex table
+stargazer(detrend_lmer_full(rural_model), ci=T)
+```
+
+####4.1.2.3 Plot time-varying effect of AI/Non-AI county type binary variable (county_type interaction effect with year)
+
+#####4.1.2.3.1 All Main Analysis Counties
+```{r}
+# Year as a categorical variable
+# vcov matrix
+summary(detrend_lmer_full_catyr_intx(model_lmer))
+native_yr_vcov <- vcov(detrend_lmer_full_catyr_intx(model_lmer))[c(2,seq(39,56)), c(2,seq(39,56))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all <- data.frame()
+pm_decline_model_all[1,1] <- summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[2,1]
+pm_decline_model_all[1,2] <- summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[2,1] - sd_vector[1]
+pm_decline_model_all[1,3] <- summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_all[i,1] <- summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[yr_ct,1]
+  pm_decline_model_all[i,2] <- summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[yr_ct,1] - sd_vector[i]
+  pm_decline_model_all[i,3] <- summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(model_lmer))$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+model_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+model_interx_plot 
+```
+
+#####4.1.2.3.1 Rural Main Analysis Counties only
+```{r}
+# Year as a categorical variable
+# vcov matrix
+summary(detrend_lmer_full_catyr_intx(rural_monitors))
+summary(detrend_lmer_full_catyr_intx(rural_model))
+native_yr_vcov <- vcov(detrend_lmer_full_catyr_intx(rural_model))[c(2,seq(39,56)), c(2,seq(39,56))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+var_vector
+sd_vector <- sqrt(var_vector)
+length(sd_vector)
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_rural <- data.frame()
+pm_decline_model_rural[1,1] <- summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[2,1]
+pm_decline_model_rural[1,2] <- summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[2,1] - sd_vector[1]
+pm_decline_model_rural[1,3] <- summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_rural[i,1] <- summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[yr_ct,1]
+  pm_decline_model_rural[i,2] <- summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[yr_ct,1] - sd_vector[i]
+  pm_decline_model_rural[i,3] <- summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[2,1]+
+    summary(detrend_lmer_full_catyr_intx(rural_model))$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+pm_decline_model_rural
+# set col names
+colnames(pm_decline_model_rural) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_rural$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+model_interx_rural <- ggplot() + theme_linedraw() + 
+  geom_line(data = pm_decline_model_rural,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_rural,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_rural,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in Rural AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+model_interx_rural 
+```
+
+
+####4.1.2.3 Model Data: Sensitivity Analysis (To be added)
+July 7 update:
+To be added! Haven't gotten here quite yet.
+
