@@ -903,6 +903,26 @@ all_PM25_plot
 all_PM25_tbl
 ```
 
+#### 3.1.2.1 MAIN ANALYSIS: Chi-Squared test to compare monitor distributions
+```{r}
+# Run just part of the above function to get table of all unique avg_mon values for AI and non-AI populated counties, and then use table function to make contingency table
+all_mon <- rbind(general_PM25_freq, native_PM25_freq)
+all_mon <- all_mon %>% 
+  mutate(bins = case_when(
+        avg_mon == 0 ~ "0",
+        avg_mon > 0 & avg_mon < 1 ~ "(0,1)", 
+        avg_mon >= 1 & avg_mon < 2 ~ "[1,2)",
+        avg_mon >= 2 ~ ">=2"))
+all_mon$bins <- as.factor(all_mon$bins)
+final_mon_tbl <- all_mon %>%
+  group_by(bins, county_type)
+final_mon_tbl
+monitor_contingency <- table(final_mon_tbl$county_type, final_mon_tbl$bins)
+
+chisq.test(monitor_contingency)
+```
+
+
 
 ### 3.1.3 SENSITIVITY ANALYSIS: Monitor coverage for AI/non-AI counties of the 3 different classifications
 #### 3.1.3.1 Monitor coverage for census definition native/non-native counties
