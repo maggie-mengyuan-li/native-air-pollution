@@ -470,7 +470,7 @@ summary(tribal48)
 # Do some magic in QGIS: I imported the tribal48 shapefile and the county shapefile, used the overlap function to join the layers (input layer = counties), which spits out a temporary layer showing the percent overlap of reservations in each county, for each county in the attribute table (I believe the column is called overlap_pc. I went into the properties of this layer, filtered out those with overlap_pc >= 20%, and exported this as a shapefile. I then read this in below:
 
 # Read in cleaned counties with >= 20% area covered by reservation lands 
-setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
 reservation_counties <- rgdal::readOGR("tribal48/tribal20_counties.shp")
 typeof(reservation_counties$GEOID)
 
@@ -1291,8 +1291,8 @@ avg_PM25_row_main <-data.frame(mean(native_avg_exp$avg_pm_all),
 names(avg_PM25_row_main) <- names(num_counties_row_main) 
 sd_PM25_row_main <- data.frame(sd(native_avg_exp$avg_pm_all),
                                sd(general_avg_exp$avg_pm_all),
-                               sd(monitors_native_avgexp$avg_pm_all),
-                               sd(monitors_general_avgexp$avg_pm_all))
+                               sd(native_avg_exp$avg_pm_all),
+                               sd(general_avg_exp$avg_pm_all))
 names(sd_PM25_row_main) <- names(num_counties_row_main) 
 
 #Mean Annual Concentrations by Model & SD
@@ -1307,13 +1307,16 @@ native_modelexp <- avg_modelPM25 %>% filter(county_type == 1)
 general_modelexp <- avg_modelPM25 %>% filter(county_type == 0)
 
 avg_modelPM25$county_type <- as.factor(avg_modelPM25$county_type) #need to convert into a factor to join with the other dataset
-native_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_native_avgexp) %>%
+
+# modeled pm2.5 for counties with monitors
+native_monitor_modelexp <- avg_modelPM25 %>% inner_join(native_avg_exp) %>%
   filter(county_type == 1)
 
-general_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_general_avgexp) %>%
+general_monitor_modelexp <- avg_modelPM25 %>% inner_join(general_avg_exp) %>%
   filter(county_type == 0)
 general_monitor_modelexp
 
+# make avg model row
 avg_modelPM25_row_main <-data.frame(mean(native_modelexp$avg_modelpm),
                                mean(general_modelexp$avg_modelpm),
                                mean(native_monitor_modelexp$avg_modelpm),
@@ -1455,6 +1458,8 @@ names(sd_mon_row_main) <- names(num_counties_row_main)
 # Rural counties: monitor mean concentrations & SD
 rural_native_avgexp <- native_avg_exp %>% filter(as.numeric(land_use) >= 4)
 rural_general_avgexp <- general_avg_exp %>% filter(as.numeric(land_use) >= 4)
+
+# new variables for PM2.5 concentrations in counties with monitors
 monitors_rural_avgexp <- rural_native_avgexp
 monitors_general_avgexp <- rural_general_avgexp
 
@@ -1474,7 +1479,7 @@ rural_native_modelexp <- avg_modelPM25 %>% filter(county_type == 1,
                                                   as.numeric(land_use) >= 4)
 rural_general_modelexp <- avg_modelPM25 %>% filter(county_type == 0,
                                                    as.numeric(land_use) >= 4)
-rural_native_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_native_avgexp) %>%
+rural_native_monitor_modelexp <- avg_modelPM25 %>% inner_join(native_avg_exp) %>%
   filter(county_type == 1, as.numeric(land_use) >= 4)
 rural_general_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_general_avgexp) %>%
   filter(county_type == 0, as.numeric(land_use) >= 4)
@@ -1681,7 +1686,7 @@ native_exp_plot_movavg <- ggplot() +
 native_exp_plot_movavg 
 ```
 
-#### 8/5 Updated Plot with Multiple Legends
+#### 8/5 Updated Plot for paper
 ```{r}
 # PLOT with separate legends
 # og plot, no legend
@@ -1702,6 +1707,14 @@ p1 <- ggplot() +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 14))  + theme(legend.position="None")
 
+# FOR PAPER: want just the plot, no legend
+p1
+```
+
+Extra code in case you want the legend in there!
+```{r}
+library(cowplot)
+library(patchwork)
 # # first plot all states
 # states_only <- ggplot() + 
 #   geom_line(data = native_exp_final,
@@ -1742,9 +1755,6 @@ p1 <- ggplot() +
 #                      axis = "t",
 #                      rel_widths = c(1, 0.3)
 # )
-
-# FOR PAPER: want just the plot, no legend
-p1
 ```
 
 ####3.4.1.2 Non-AI Counties
@@ -1901,8 +1911,7 @@ leg12
 # Full model pm2.5 dataset
 model_PM25
 # Separate out data of just native counties:
-native_modelpm <- model_PM25 %>% filter(county_type == 1) %>% 
-  dplyr::rename(Year = year)
+native_modelpm <- model_PM25 %>% filter(county_type == 1)
 # Join with data to get state acronyms
 native_modelpm <- native_modelpm %>% 
   dplyr::select(County, Year, PM25, State)
