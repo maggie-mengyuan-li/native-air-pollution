@@ -1,0 +1,50 @@
+﻿State,Climate_Zone,FIPS
+Illinois,Central,17
+Indiana ,Central,18
+Kentucky,Central,21
+Missouri,Central,29
+Ohio,Central,39
+Tennessee,Central,47
+West Virginia,Central,54
+Iowa,East North Central,19
+Michigan,East North Central,26
+Minnesota,East North Central,27
+Wisconsin,East North Central,55
+Connecticut ,Northeast,9
+Delaware ,Northeast,10
+Maine ,Northeast,23
+Maryland ,Northeast,24
+Massachusetts ,Northeast,25
+New Hampshire ,Northeast,33
+New Jersey ,Northeast,34
+New York ,Northeast,36
+Pennsylvania ,Northeast,42
+Rhode Island ,Northeast,44
+Vermont ,Northeast,50
+Idaho ,Northwest,16
+Oregon ,Northwest,41
+Washington ,Northwest,53
+Arkansas ,South,5
+Kansas ,South,20
+Louisiana ,South,22
+Mississippi ,South,28
+Oklahoma ,South,40
+Texas ,South,48
+Alabama ,Southeast,1
+Florida ,Southeast,12
+Georgia ,Southeast,13
+North Carolina ,Southeast,37
+South Carolina ,Southeast,45
+Virginia ,Southeast,51
+Arizona ,Southwest,4
+Colorado ,Southwest,8
+New Mexico ,Southwest,35
+Utah ,Southwest,49
+California ,West,6
+Nevada ,West,32
+Montana ,West North Central,30
+Nebraska ,West North Central,31
+North Dakota ,West North Central,38
+South Dakota ,West North Central,46
+Wyoming ,West North Central,56
+District of Columbia,Southeast,11

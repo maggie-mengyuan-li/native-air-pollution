@@ -1,0 +1,50 @@
+﻿State,EPA_region,FIPS
+Illinois,5,17
+Indiana ,5,18
+Kentucky,4,21
+Missouri,7,29
+Ohio,5,39
+Tennessee,4,47
+West Virginia,3,54
+Iowa,5,19
+Michigan,5,26
+Minnesota,5,27
+Wisconsin,5,55
+Connecticut ,1,9
+Delaware ,3,10
+Maine ,1,23
+Maryland ,3,24
+Massachusetts ,1,25
+New Hampshire ,1,33
+New Jersey ,2,34
+New York ,2,36
+Pennsylvania ,3,42
+Rhode Island ,1,44
+Vermont ,1,50
+Idaho ,10,16
+Oregon ,10,41
+Washington ,10,53
+Arkansas ,6,5
+Kansas ,7,20
+Louisiana ,6,22
+Mississippi ,4,28
+Oklahoma ,6,40
+Texas ,6,48
+Alabama ,4,1
+Florida ,4,12
+Georgia ,4,13
+North Carolina ,4,37
+South Carolina ,4,45
+Virginia ,3,51
+Arizona ,9,4
+Colorado ,8,8
+New Mexico ,6,35
+Utah ,8,49
+California ,9,6
+Nevada ,9,32
+Montana ,8,30
+Nebraska ,7,31
+North Dakota ,8,38
+South Dakota ,8,46
+Wyoming ,8,56
+District of Columbia,3,11
