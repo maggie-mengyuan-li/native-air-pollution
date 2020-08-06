@@ -73,7 +73,7 @@ I downloaded these here: https://aqs.epa.gov/aqsweb/airdata/download_files.html
 I've included them in the data folder as csv files since they were a bit of a hassle to clean from their OG .txt file format, but you can try to download them from the source and check!
 
 ```{r}
-setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/EPA_data_1999_2018")
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/EPA_data_1999_2018")
 annual_conc_by_monitor_1999 <- read.csv("annual_conc_by_monitor_1999.csv")
 annual_conc_by_monitor_2000 <- read.csv("annual_conc_by_monitor_2000.csv")
 annual_conc_by_monitor_2001 <- read.csv("annual_conc_by_monitor_2001.csv")
@@ -160,7 +160,7 @@ IMPROVE Monitoring Network data downloaded from here: http://views.cira.colostat
 I selected EPA PM2.5 MASS FRM (88101) Daily, 2000-2018, and clipped it (PM2_5_1999_2018_rural_clipped.txt). I forgot to download the data the first time with geolocation information so the second imported dataset (IMPROVE_location_tbl) has the lat/lon coordinates, which I joined to the first dataset.
 
 ```{r}
-PM2_5_1999_2018_rural_clipped<-read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/PM2_5_1999_2018_rural_clipped.txt", sep="")
+PM2_5_1999_2018_rural_clipped<-read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/PM2_5_1999_2018_rural_clipped.txt", sep="")
 #Aggregate daily to annual data
 #Step 1: only keep the year in the date columns, to make it easier to aggregate
 
@@ -234,7 +234,7 @@ PM25_rural_annual <- subset(PM25_rural_annual,
 
 # July 7 Note: I was dumb and didn't download the data above with Lat/Long coordinates. So I had to re-download it and join the two datasets.
 
-IMPROVE_location_tbl <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/IMPROVE_location_tbl.csv")
+IMPROVE_location_tbl <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/IMPROVE_location_tbl.csv")
 IMPROVE_lat_lon <- subset(IMPROVE_location_tbl,
                           select = c(2,6,8,9))
 #Rename column Code to SiteCode to match other table
@@ -329,7 +329,7 @@ I've put one ncdf downloaded from the source for 2008 if you want to try running
 # Source: Randall Martin's PM2.5 Model http://fizz.phys.dal.ca/~atmos/martin/?page_id=140
 
 # #all counties shapefile
-# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/cb_2018_us_county_500k")
+# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/cb_2018_us_county_500k")
 # counties_shp <- "cb_2018_us_county_500k.shp"
 # all_counties <- st_read(counties_shp, stringsAsFactors = FALSE)
 # 
@@ -352,7 +352,7 @@ I've put one ncdf downloaded from the source for 2008 if you want to try running
 # }
 # 
 # # read in ncdf as raster stack for example year: 2008
-# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/model_PM25")
+# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25")
 # model_PM25_2008 <- raster("GWRwSPEC_PM25_NA_200801_200812-RH35.nc")
 # model_PM25_2008 <- stack(model_PM25_2008)
 # 
@@ -375,7 +375,7 @@ I've put one ncdf downloaded from the source for 2008 if you want to try running
 ###Read in county model PM2.5 data
 ```{r}
 #Read in model data into list of length 19 (# study years)
-setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/model_PM25")
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25")
 model_PM25 <- list()
 yr = 2000
 for (i in 1:19){
@@ -396,7 +396,7 @@ Outcome = PM2.5 concentration (monitor), PM2.5 concentration (model), PM2.5 cove
 ###2.1.1 Define Rural Cluster (Wallace et al.) Counties, extract PM2.5 values for sensitivity analysis
 ```{r}
 # Read in county data for rural clusters & extract PM2.5 data
-counties_cluster <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/clustershare.csv")
+counties_cluster <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/clustershare.csv")
 native_rural_counties <- subset.data.frame(counties_cluster,
                                            cluster.name =="Rural, American Indian")
 
@@ -451,7 +451,7 @@ native_census_counties
 ```{r}
 # Read in gdb of recognized reservations 
 # Source: https://edg.epa.gov/metadata/catalog/search/resource/details.page?uuid=%7B8077CD55-74FB-4107-8047-3DEC0D55966A%7D
-tribal.gdb <- "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/Tribal_Boundaries_022117.gdb"
+tribal.gdb <- "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/Tribal_Boundaries_022117.gdb"
 tribal.gdb
 
 # List all feature classes in a file geodatabase
@@ -464,7 +464,7 @@ summary(tribal48)
 
 # Read out shapefile, to use in QGIS to find 20% overlap (commented out)
 # writeOGR(obj = tribal48, 
-#          dsn = "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data/tribal48",
+#          dsn = "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/tribal48",
 #          layer = "tribal48", driver = "ESRI Shapefile")
 
 # Do some magic in QGIS: I imported the tribal48 shapefile and the county shapefile, used the overlap function to join the layers (input layer = counties), which spits out a temporary layer showing the percent overlap of reservations in each county, for each county in the attribute table (I believe the column is called overlap_pc. I went into the properties of this layer, filtered out those with overlap_pc >= 20%, and exported this as a shapefile. I then read this in below:
@@ -491,7 +491,7 @@ reservation_counties
 # Rural/Urban Classification: downloaded from CDC NCHS https://www.cdc.gov/nchs/data_access/urban_rural.htm
 # Key: 1 = large central metro; 2 = large fringe metro; 3 = medium metro; 4 = small metro; 5 = micropolitan (population of at least 10,000 but less than 50,000); 6 = non-core
 # Basically 1-3 is urban, 4-6 is suburban/rural
-setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
 urban_rural_counties_2013 <- read.csv("urban_rural_counties_2013.csv")
 #add leading 0; first make column vector
 County <- formatC(urban_rural_counties_2013$FIPS.code, width = 5, format = "d", flag = "0")
@@ -547,7 +547,7 @@ hh_income_census <- hh_income_census %>%
 hh_income_census
 
 #Climate Zone data source: https://www.ncdc.noaa.gov/monitoring-references/maps/us-climate-regions.php?hc_location=ufi
-setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
 climatezonefips <- read.csv("climatezonefips.csv")
 climatezonefips
 climatezonefips$FIPS <- as.numeric(climatezonefips$FIPS)
@@ -1594,7 +1594,7 @@ August 5 update: Example code to add multiple legend (source: https://stackoverf
 
 ```{r}
 # Read in state FIPS dataset
-setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
 state_fips <- read_csv("state_fips.csv")
 state_fips <- state_fips %>% dplyr::select(State_Name, State)
 
@@ -2124,7 +2124,7 @@ p4
 ### 3.5.1 Define AI counties as an sp file, by joining county lists of all 3 classifications with a county shapefile
 ```{r}
 #map all native counties; to get sense of location to compare to monitor coverage
-setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/Data")
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
 counties <- rgdal::readOGR("cb_2018_us_county_500k/cb_2018_us_county_500k.shp")
 summary(counties)
 
