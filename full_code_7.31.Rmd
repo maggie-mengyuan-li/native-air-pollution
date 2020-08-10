@@ -483,7 +483,10 @@ overlap_counties
 # convert reservation counties spdf to dataframe
 reservation_counties <- as.data.frame(reservation_counties)
 reservation_counties <- reservation_counties %>% dplyr::select(GEOID) %>% dplyr::rename(County = GEOID)
-reservation_counties
+
+#august 10 edit: need to recode FIPS 46102 to 46113 (Shannon County, SD was renamed Oglala Lakota County in 2015) for consistency with other data
+reservation_counties$GEOID <- gsub("46102", "46113", reservation_counties$GEOID)
+view(reservation_counties)
 ```
 
 ## 2.2 Define potential covariates of interest (Rural/Urban Classification, Population Density, Climate Zone, Median HH Income)

@@ -1,5 +1,5 @@
 ---
-title: "Supplement Tables"
+title: "Supplement"
 author: "Maggie Li (ml4424)"
 date: "8/10/2020"
 output: html_document
@@ -9,18 +9,21 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+#1. Supplementary Tables by Land Zone Type and Geographical Region
+
+##1.1 Tables showing the number of AI and non-AI counties in each NCHS rural/urban classification
 ```{r}
-#test for association between native county status and EPA_region: chi-squared
-library(MASS)
-EPA_reservation_tbl <- table(reservation_count_full$county_type, reservation_count_full$EPA_region)
-chisq.test(EPA_reservation_tbl) #large test statistic provides evidence that native county status is not independent of EPA region
+#rural/urban categories for main analysis
+all_avgmon_full
+main_tbl_nchs <- table(all_avgmon_full$county_type,
+      all_avgmon_full$land_use)
+main_tbl_nchs 
 
 in_tbls <- list(census_avgmon_full, 
                 cluster_avgmon_full,
-                SHS_avgmon_full,
                 reservation_avgmon_full)
 
-#rural/urban list for all classifications
+#rural/urban list for separate classifications 
 out_tbls <- list(length(in_tbls))
 xtbls <- list()
 for (i in 1:length(in_tbls)){
@@ -28,9 +31,18 @@ for (i in 1:length(in_tbls)){
                          in_tbls[[i]]$land_use)
   xtbls[[i]] <- xtable(out_tbls[[i]])
 }
-xtbls
+out_tbls #R tables
+xtbls #xtables for LaTeX
+```
 
+##1.2 EPA/Geographical Region
+```{r}
 #EPA region for all classifications
+all_avgmon_full
+main_tbl_epa <- table(all_avgmon_full$county_type,
+      all_avgmon_full$EPA_region)
+main_tbl_epa
+
 out_EPA_tbls <- list(length(in_tbls))
 EPA_xtbls <- list()
 for (i in 1:length(in_tbls)){
@@ -38,12 +50,49 @@ for (i in 1:length(in_tbls)){
                          in_tbls[[i]]$EPA_region)
   EPA_xtbls[[i]] <- xtable(out_EPA_tbls[[i]])
 }
-EPA_xtbls
-
-
+out_EPA_tbls #R tables
+EPA_xtbls #xtables for LaTeX
 ```
 
-```{r}
+#2. Monitor Distribution
 
+##2.1 Rural Counties (Main Analysis subset)
+```{r}
+view(covariates)
+nativePM25_df <- do.call(rbind, all_native_PM25)
+generalPM25_df <- do.call(rbind, all_general_PM25)
+rural_nativePM25 <- anti_join(nativePM25_df, covariates, by = "County")
+view(nativePM25_df)
+
+native_PM25_monitors <- avg_mon(all_native_PM25, "AI-Populated County")
+native_PM25_freq <- mon_freq(native_PM25_monitors, "AI-Populated County")
+
+general_PM25_monitors <- avg_mon(all_general_PM25, "Non-AI Populated County")
+general_PM25_freq <- mon_freq(general_PM25_monitors, "Non-AI Populated County")
+
+all_PM25_tbl <- combine_freq(native_PM25_freq, general_PM25_freq)
+# all_PM25_tbl$total_prop <- all_PM25_tbl$total_prop*100 #convert decimal-percentage to actual percentage
+#check area under curve equals 1 for non-native and native
+sum(general_PM25_freq$prop)
+sum(native_PM25_freq$prop)
+
+#Bar graph all counties
+all_PM25_plot <- ggplot(all_PM25_tbl, 
+                            aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
+       fill = "County Type") 
+all_PM25_plot 
+all_PM25_tbl
 ```
 
