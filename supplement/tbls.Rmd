@@ -1,0 +1,49 @@
+---
+title: "Supplement Tables"
+author: "Maggie Li (ml4424)"
+date: "8/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#test for association between native county status and EPA_region: chi-squared
+library(MASS)
+EPA_reservation_tbl <- table(reservation_count_full$county_type, reservation_count_full$EPA_region)
+chisq.test(EPA_reservation_tbl) #large test statistic provides evidence that native county status is not independent of EPA region
+
+in_tbls <- list(census_avgmon_full, 
+                cluster_avgmon_full,
+                SHS_avgmon_full,
+                reservation_avgmon_full)
+
+#rural/urban list for all classifications
+out_tbls <- list(length(in_tbls))
+xtbls <- list()
+for (i in 1:length(in_tbls)){
+  out_tbls[[i]] <- table(in_tbls[[i]]$county_type,
+                         in_tbls[[i]]$land_use)
+  xtbls[[i]] <- xtable(out_tbls[[i]])
+}
+xtbls
+
+#EPA region for all classifications
+out_EPA_tbls <- list(length(in_tbls))
+EPA_xtbls <- list()
+for (i in 1:length(in_tbls)){
+  out_EPA_tbls[[i]] <- table(in_tbls[[i]]$county_type,
+                         in_tbls[[i]]$EPA_region)
+  EPA_xtbls[[i]] <- xtable(out_EPA_tbls[[i]])
+}
+EPA_xtbls
+
+
+```
+
+```{r}
+
+```
+

@@ -906,6 +906,8 @@ all_PM25_tbl
 #### 3.1.2.1 MAIN ANALYSIS: Chi-Squared test to compare monitor distributions
 ```{r}
 # Run just part of the above function to get table of all unique avg_mon values for AI and non-AI populated counties, and then use table function to make contingency table
+native_PM25_monitors
+general_PM25_monitors
 all_mon <- rbind(general_PM25_freq, native_PM25_freq)
 all_mon <- all_mon %>% 
   mutate(bins = case_when(
@@ -920,6 +922,8 @@ final_mon_tbl
 monitor_contingency <- table(final_mon_tbl$county_type, final_mon_tbl$bins)
 
 chisq.test(monitor_contingency)
+
+# Conclusion: monitor distribution is not independent of AI/non-AI populated county status
 ```
 
 
