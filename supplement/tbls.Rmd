@@ -204,13 +204,17 @@ tribal_sensitivity <- rgdal::readOGR("any_tribal_overlap.shp")
 #map
 leaflet() %>%
   addProviderTiles("CartoDB.PositronNoLabels") %>%
-  addPolygons(data = tribal_sensitivity_spatial, color = "#3DACF0")
+  addPolygons(data = tribal_sensitivity, color = "#3DACF0")
 
 # change reservation dataset to be the same format
 # first convert spdf to df
 tribal_sensitivity <- as.data.frame(tribal_sensitivity)
 tribal_sensitivity <- tribal_sensitivity %>% dplyr::rename(County = GEOID)
 tribal_sensitivity$County <- as.character(tribal_sensitivity$County)
+
+# need to recode FIPS 46102 to 46113 (Shannon County, SD was renamed Oglala Lakota County in 2015) for consistency with other data
+
+tribal_sensitivity$County <- gsub("46102", "46113", tribal_sensitivity$County)
 view(tribal_sensitivity)
 ```
 
@@ -227,17 +231,6 @@ all_native_counties_sens <- rbind(census, all_reservation, cluster)
 all_native_counties_sens <- unique(all_native_counties_sens) 
 view(all_native_counties_sens)
 
-# # Get list of all US counties from census
-# all_counties <- get_decennial(geography = "county", 
-#                                variables = total_pop, 
-#                                year = 2010)
-# all_counties$State <- substr(all_counties$GEOID, 0, 2)
-# all_counties$State <- as.numeric(all_counties$State)
-# all_counties <- all_counties %>%
-#   filter(State <= 56,
-#          State != 2,
-#          State != 15) #filter out HI, AL, US territories
-
 # County list of all non-native counties
 all_counties_list <- all_counties %>% dplyr::select(GEOID) %>% 
   dplyr::rename(County = GEOID) #cleaned all_counties df to use in anti_join
@@ -251,6 +244,7 @@ all_native_counties_sens$county_type <- 1
 all_general_counties_sens$county_type <- 0
 main_analysis_counties_sens <- rbind(all_native_counties_sens, all_general_counties_sens)
 main_analysis_counties_sens %>% subset(county_type == "1")
+view(main_analysis_counties_sens)
 ```
 
 ###2.3.3 Extract monitor PM2.5 concentrations and coverage:
@@ -269,7 +263,7 @@ all_general_PM25_sens
 all_native_PM25_sens
 ```
 
-###2.3.4 Monitor coverage for all AI/non-AI counties 
+###2.3.4 Monitor coverage for all AI/non-AI counties (include main analysis counties and counties with any federally recognized reservation lands)
 ```{r}
 native_PM25_monitors_sens <- avg_mon(all_native_PM25_sens, "AI-Populated County")
 native_PM25_monitors_sens
@@ -295,7 +289,7 @@ all_PM25_plot_sens <- ggplot(all_PM25_tbl_sens,
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018 (Sensitivity Analysis)")),
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018 (Any Tribal Lands)")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
        fill = "County Type") 
@@ -330,10 +324,11 @@ census_PM25_plot <- ggplot(census_PM25_tbl,
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
-  theme(plot.title = element_text(size = 16),
-        axis.title = element_text(size = 14),
-        legend.title = element_text(size = 12),
-        legend.text = element_text(size = 11)) +
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
   labs(title = expression(paste(PM[2.5], " Monitor Distribution \n in AI vs Non-AI Populated Census Counties, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -380,10 +375,11 @@ cluster_PM25_plot <- ggplot(cluster_PM25_tbl,
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
-  theme(plot.title = element_text(size = 16),
-        axis.title = element_text(size = 14),
-        legend.title = element_text(size = 12),
-        legend.text = element_text(size = 11)) +
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
   labs(title = expression(paste(PM[2.5], " Monitor Distribution in Rural Clustered Counties, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -407,16 +403,18 @@ reservation_PM25_plot <- ggplot(reservation_PM25_tbl,
                             aes(x=lvl_bins, 
                                 y = total_prop,
                                 fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
-  theme(plot.title = element_text(size = 16),
-        axis.title = element_text(size = 14),
-        legend.title = element_text(size = 12),
-        legend.text = element_text(size = 11)) +
-  labs(title = "PM2.5 Monitor Distribution in Counties containing AI Reservations \n vs. Non-AI Counties",
-       x = "Average number of annual monitors per county type from 1999-2018",
-       y = "Proportion of Counties",
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution (Reservations), 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
        fill = "County Type")
 sum(reservation_PM25_freq$prop)
 sum(general_reservation_PM25_freq$prop)
@@ -464,16 +462,18 @@ reservation_PM25_plot_sens <- ggplot(reservation_PM25_tbl_sens,
                             aes(x=lvl_bins, 
                                 y = total_prop,
                                 fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
-  theme(plot.title = element_text(size = 16),
-        axis.title = element_text(size = 14),
-        legend.title = element_text(size = 12),
-        legend.text = element_text(size = 11)) +
-  labs(title = "PM2.5 Monitor Distribution in Counties containing AI Reservations \n vs. Non-AI Counties (Sensitivity Analysis)",
-       x = "Average number of annual monitors per county type from 1999-2018",
-       y = "Proportion of Counties",
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution (Counties with any reservations only)")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
        fill = "County Type")
 sum(reservation_PM25_freq$prop)
 sum(general_reservation_PM25_freq$prop)
@@ -485,7 +485,8 @@ reservation_PM25_tbl_sens
 #3. Linear Mixed Effects Regression Sensitivity Analyses (Output = Modeled PM2.5)
 
 ##3.1 Rural Counties (Main Analysis subset)
-##3.1.1 Re-read in Model PM2.5 data (need to run this chunk as a whole due to overwriting variable name)
+
+##3.1.1 Re-read in Model PM2.5 data (need to run this chunk as a whole due to overwriting variable name) and define rural counties and join with model PM2.5 data
 ```{r}
 #Read in model data into list of length 19 (# study years)
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25")
@@ -530,10 +531,316 @@ rural_model_PM25 <- dplyr::rename(rural_model_PM25, year=Year)
 # rename column for PM25 to match predefined function arguments
 rural_model_lmer <-  dplyr::rename(rural_model_PM25,annual_mean_all=PM25)
 
-# Run LMER (crude, partial, adjusted)
-summary(detrend_lmer_crude(rural_model_lmer))
-summary(detrend_lmer_partial(rural_model_lmer))
+# Run LMER (fully adjusted only)
 summary(detrend_lmer_full(rural_model_lmer))
 
+# point estimate
+summary(detrend_lmer_full(rural_model_lmer))$coefficients[2,1]
+# 95% upper
+summary(detrend_lmer_full(rural_model_lmer))$coefficients[2,1] + 1.96*summary(detrend_lmer_full(rural_model_lmer))$coefficients[2,2]
+
+# 95% lower
+summary(detrend_lmer_full(rural_model_lmer))$coefficients[2,1] - 1.96*summary(detrend_lmer_full(rural_model_lmer))$coefficients[2,2]
+
+# tex table output
+stargazer(detrend_lmer_full(rural_model_lmer),ci=T)
+```
+
+##3.2 Non-NE Counties (Main Analysis subset)
+
+###3.2.1 Define Non-NE counties and join with model PM2.5 data
+```{r}
+non_ne_PM25_counties <- main_analysis_counties %>% inner_join(covariates) %>% subset(as.numeric(as.character(EPA_region)) >=4)
+
+# inner join with rural counties dataset to get modeled pm2.5 values for these counties
+non_ne_model_PM25 <- inner_join(model_PM25, covariates) %>% inner_join(non_ne_PM25_counties)
+non_ne_model_PM25
+```
+
+###3.2.2 Run lmer model
+```{r}
+# Split population density and hhincome into deciles for model
+non_ne_model_PM25$popd_q <- cut(non_ne_model_PM25$pop_density, quantile(non_ne_model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+non_ne_model_PM25$hhinc_q <- cut(non_ne_model_PM25$hh_income, quantile(non_ne_model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+non_ne_model_PM25
+sum(table(non_ne_model_PM25$popd_q, exclude = NULL)) == dim(non_ne_model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+non_ne_model_PM25$county_type <- as.factor(as.character(non_ne_model_PM25$county_type))
+
+  # set referent
+non_ne_model_PM25$county_type <- relevel(non_ne_model_PM25$county_type,
+                                         ref = "0")
+non_ne_model_PM25$Year <- as.factor(non_ne_model_PM25$Year)
+non_ne_model_PM25 <- dplyr::rename(non_ne_model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+non_ne_model_lmer <-  dplyr::rename(non_ne_model_PM25,annual_mean_all=PM25)
+
+# Run LMER (fully adjusted only)
+summary(detrend_lmer_full(non_ne_model_lmer))
+
+# point estimate
+summary(detrend_lmer_full(non_ne_model_lmer))$coefficients[2,1]
+# 95% upper
+summary(detrend_lmer_full(non_ne_model_lmer))$coefficients[2,1] + 1.96*summary(detrend_lmer_full(non_ne_model_lmer))$coefficients[2,2]
+
+# 95% lower
+summary(detrend_lmer_full(non_ne_model_lmer))$coefficients[2,1] - 1.96*summary(detrend_lmer_full(non_ne_model_lmer))$coefficients[2,2]
+
+# tex table output
+stargazer(detrend_lmer_full(non_ne_model_lmer),ci=T)
+```
+
+##3.3 Counties with any federally-recognized reservations (Main Analysis subset)
+
+###3.3.1 Define counties and join with model PM2.5 data
+```{r}
+main_analysis_counties_sens
+
+# inner join with rural counties dataset to get modeled pm2.5 values for these counties
+any_tribal_model_PM25 <- inner_join(model_PM25, covariates) %>% inner_join(main_analysis_counties_sens)
+any_tribal_model_PM25
+```
+
+###3.3.2 Run lmer model
+```{r}
+# Split population density and hhincome into deciles for model
+any_tribal_model_PM25$popd_q <- cut(any_tribal_model_PM25$pop_density, quantile(any_tribal_model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+any_tribal_model_PM25$hhinc_q <- cut(any_tribal_model_PM25$hh_income, quantile(any_tribal_model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+any_tribal_model_PM25
+sum(table(any_tribal_model_PM25$popd_q, exclude = NULL)) == dim(any_tribal_model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+any_tribal_model_PM25$county_type <- as.factor(as.character(any_tribal_model_PM25$county_type))
+
+  # set referent
+any_tribal_model_PM25$county_type <- relevel(any_tribal_model_PM25$county_type,
+                                         ref = "0")
+any_tribal_model_PM25$Year <- as.factor(any_tribal_model_PM25$Year)
+any_tribal_model_PM25 <- dplyr::rename(any_tribal_model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+any_tribal_model_lmer <-  dplyr::rename(any_tribal_model_PM25,annual_mean_all=PM25)
+
+# Run LMER (fully adjusted only)
+summary(detrend_lmer_full(any_tribal_model_lmer))
+
+# point estimate
+summary(detrend_lmer_full(any_tribal_model_lmer))$coefficients[2,1]
+# 95% upper
+summary(detrend_lmer_full(any_tribal_model_lmer))$coefficients[2,1] + 1.96*summary(detrend_lmer_full(any_tribal_model_lmer))$coefficients[2,2]
+
+# 95% lower
+summary(detrend_lmer_full(any_tribal_model_lmer))$coefficients[2,1] - 1.96*summary(detrend_lmer_full(any_tribal_model_lmer))$coefficients[2,2]
+
+# tex table output
+stargazer(detrend_lmer_full(any_tribal_model_lmer),ci=T)
+```
+
+##3.4 Census Classification only
+
+###3.4.1 Define counties and join with model pm2.5 data
+```{r}
+# relevant df for AI/non-AI counties
+general_counties_census 
+native_census_counties_list
+
+# new df combining the two
+census_counties_df <- general_counties_census %>% mutate(county_type = 0) %>%
+  bind_rows(native_census_counties_list %>% mutate(county_type = 1))
+
+# join this with covariates & model PM2.5
+census_model_PM25 <- inner_join(model_PM25, covariates) %>% inner_join(census_counties_df)
+census_model_PM25
+```
+
+###3.4.2  Run lmer model
+```{r}
+# Split population density and hhincome into deciles for model
+census_model_PM25$popd_q <- cut(census_model_PM25$pop_density, quantile(census_model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+census_model_PM25$hhinc_q <- cut(census_model_PM25$hh_income, quantile(census_model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+census_model_PM25
+sum(table(census_model_PM25$popd_q, exclude = NULL)) == dim(census_model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+census_model_PM25$county_type <- as.factor(as.character(census_model_PM25$county_type))
+
+  # set referent
+census_model_PM25$county_type <- relevel(census_model_PM25$county_type,
+                                         ref = "0")
+census_model_PM25$Year <- as.factor(census_model_PM25$Year)
+census_model_PM25 <- dplyr::rename(census_model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+census_model_lmer <-  dplyr::rename(census_model_PM25,annual_mean_all=PM25)
+
+# Run LMER (fully adjusted only)
+summary(detrend_lmer_full(census_model_lmer))
+
+# point estimate
+summary(detrend_lmer_full(census_model_lmer))$coefficients[2,1]
+# 95% upper
+summary(detrend_lmer_full(census_model_lmer))$coefficients[2,1] + 1.96*summary(detrend_lmer_full(census_model_lmer))$coefficients[2,2]
+
+# 95% lower
+summary(detrend_lmer_full(census_model_lmer))$coefficients[2,1] - 1.96*summary(detrend_lmer_full(census_model_lmer))$coefficients[2,2]
+
+# tex table output
+stargazer(detrend_lmer_full(census_model_lmer),ci=T)
+```
+
+##3.5 Rural Cluster classification only
+
+###3.5.1 Define counties and join with covariates and model PM2.5 data
+```{r}
+# relevant df for AI/non-AI counties
+general_counties_cluster
+native_rural_counties_list
+
+# new df combining the two
+cluster_counties_df <- general_counties_cluster %>% mutate(county_type = 0) %>%
+  bind_rows(native_rural_counties_list %>% mutate(county_type = 1))
+
+# join this with covariates & model PM2.5
+cluster_model_PM25 <- inner_join(model_PM25, covariates) %>% inner_join(cluster_counties_df)
+cluster_model_PM25
+```
+
+###3.5.2 Run lmer model
+```{r}
+# Split population density and hhincome into deciles for model
+cluster_model_PM25$popd_q <- cut(cluster_model_PM25$pop_density, quantile(cluster_model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+cluster_model_PM25$hhinc_q <- cut(cluster_model_PM25$hh_income, quantile(cluster_model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+# cluster_model_PM25
+sum(table(cluster_model_PM25$popd_q, exclude = NULL)) == dim(cluster_model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+cluster_model_PM25$county_type <- as.factor(as.character(cluster_model_PM25$county_type))
+
+  # set referent
+cluster_model_PM25$county_type <- relevel(cluster_model_PM25$county_type,
+                                         ref = "0")
+cluster_model_PM25$Year <- as.factor(cluster_model_PM25$Year)
+cluster_model_PM25 <- dplyr::rename(cluster_model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+cluster_model_lmer <-  dplyr::rename(cluster_model_PM25,annual_mean_all=PM25)
+
+# Run LMER (fully adjusted only)
+# summary(detrend_lmer_full(cluster_model_lmer))
+
+# point estimate
+summary(detrend_lmer_full(cluster_model_lmer))$coefficients[2,1]
+# 95% upper
+summary(detrend_lmer_full(cluster_model_lmer))$coefficients[2,1] + 1.96*summary(detrend_lmer_full(cluster_model_lmer))$coefficients[2,2]
+
+# 95% lower
+summary(detrend_lmer_full(cluster_model_lmer))$coefficients[2,1] - 1.96*summary(detrend_lmer_full(cluster_model_lmer))$coefficients[2,2]
+
+# tex table output
+stargazer(detrend_lmer_full(cluster_model_lmer),ci=T)
+```
+
+##3.6 Reservations classification only
+```{r}
+# relevant df for AI/non-AI counties
+general_counties_reservations
+reservation_counties
+
+# new df combining the two
+reservation_counties_df <- general_counties_reservations %>% mutate(county_type = 0) %>%
+  bind_rows(reservation_counties %>% 
+              dplyr::rename(County=GEOID) %>% 
+              dplyr::select(County) %>% mutate(county_type = 1))
+
+# join this with covariates & model PM2.5
+reservation_model_PM25 <- inner_join(model_PM25, covariates) %>% inner_join(reservation_counties_df)
+reservation_model_PM25
+```
+
+###3.6.2 run lmer model
+```{r}
+# Split population density and hhincome into deciles for model
+reservation_model_PM25$popd_q <- cut(reservation_model_PM25$pop_density, quantile(reservation_model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+reservation_model_PM25$hhinc_q <- cut(reservation_model_PM25$hh_income, quantile(reservation_model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+# reservation_model_PM25
+sum(table(reservation_model_PM25$popd_q, exclude = NULL)) == dim(reservation_model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+reservation_model_PM25$county_type <- as.factor(as.character(reservation_model_PM25$county_type))
+
+  # set referent
+reservation_model_PM25$county_type <- relevel(reservation_model_PM25$county_type,
+                                         ref = "0")
+reservation_model_PM25$Year <- as.factor(reservation_model_PM25$Year)
+reservation_model_PM25 <- dplyr::rename(reservation_model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+reservation_model_lmer <-  dplyr::rename(reservation_model_PM25,annual_mean_all=PM25)
+
+# Run LMER (fully adjusted only)
+# summary(detrend_lmer_full(reservation_model_lmer))
+
+# point estimate
+summary(detrend_lmer_full(reservation_model_lmer))$coefficients[2,1]
+# 95% upper
+summary(detrend_lmer_full(reservation_model_lmer))$coefficients[2,1] + 1.96*summary(detrend_lmer_full(reservation_model_lmer))$coefficients[2,2]
+
+# 95% lower
+summary(detrend_lmer_full(reservation_model_lmer))$coefficients[2,1] - 1.96*summary(detrend_lmer_full(reservation_model_lmer))$coefficients[2,2]
+
+# tex table output
+stargazer(detrend_lmer_full(reservation_model_lmer),ci=T)
+```
+
+##3.7 Reservations classification only (any tribal overlap)
+```{r}
+tribal_sensitivity %>% dplyr::select(County)
+general_counties_tribal_sens <- anti_join(x = all_counties_list,
+                                     y = tribal_sensitivity %>% dplyr::select(County),
+                                     by= "County")
+# new df combining the two
+tribal_sens_counties_df <- general_counties_tribal_sens %>% mutate(county_type = 0) %>%
+  bind_rows(tribal_sensitivity %>% dplyr::select(County) %>% mutate(county_type = 1))
+
+# join this with covariates & model PM2.5
+tribal_sens_model_PM25 <- inner_join(model_PM25, covariates) %>% inner_join(tribal_sens_counties_df)
+tribal_sens_model_PM25
+```
+
+
+```{r}
+# Split population density and hhincome into deciles for model
+tribal_sens_model_PM25$popd_q <- cut(tribal_sens_model_PM25$pop_density, quantile(tribal_sens_model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+tribal_sens_model_PM25$hhinc_q <- cut(tribal_sens_model_PM25$hh_income, quantile(tribal_sens_model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+# tribal_sens_model_PM25
+sum(table(tribal_sens_model_PM25$popd_q, exclude = NULL)) == dim(tribal_sens_model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+tribal_sens_model_PM25$county_type <- as.factor(as.character(tribal_sens_model_PM25$county_type))
+
+  # set referent
+tribal_sens_model_PM25$county_type <- relevel(tribal_sens_model_PM25$county_type,
+                                         ref = "0")
+tribal_sens_model_PM25$Year <- as.factor(tribal_sens_model_PM25$Year)
+tribal_sens_model_PM25 <- dplyr::rename(tribal_sens_model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+tribal_sens_model_lmer <-  dplyr::rename(tribal_sens_model_PM25,annual_mean_all=PM25)
+
+# Run LMER (fully adjusted only)
+# summary(detrend_lmer_full(tribal_sens_model_lmer))
+
+# point estimate
+summary(detrend_lmer_full(tribal_sens_model_lmer))$coefficients[2,1]
+# 95% upper
+summary(detrend_lmer_full(tribal_sens_model_lmer))$coefficients[2,1] + 1.96*summary(detrend_lmer_full(tribal_sens_model_lmer))$coefficients[2,2]
+
+# 95% lower
+summary(detrend_lmer_full(tribal_sens_model_lmer))$coefficients[2,1] - 1.96*summary(detrend_lmer_full(tribal_sens_model_lmer))$coefficients[2,2]
+
+# tex table output
+stargazer(detrend_lmer_full(tribal_sens_model_lmer),ci=T)
 ```
 
