@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 ####Load packages
 ```{r}
-library(dplyr)
+require("plyr"); require(dplyr)
 library(tidyverse)
 library(stringr)
 library(tidycensus)
@@ -20,10 +20,7 @@ library(raster)
 library(choroplethr)
 library(choroplethrMaps)
 library(viridis)
-library(rgdal)
 library(ggmap)
-library(sp)
-require("plyr"); require(dplyr)
 library(tgp)
 library(mgcv)
 library(gstat)
@@ -38,7 +35,6 @@ library(rgdal)
 library(mapview); library(webshot)
 class(USAboundaries::us_counties)
 library(USAboundaries)
-library(ggplot2)
 library(maps)
 library(sf)
 library(tmap)
@@ -128,7 +124,8 @@ for (i in 1:length(all_epa_tables)){
   year <- year + 1
 }
 view(annual_conc_by_monitor_2012 %>% filter(Pollutant.Standard == "PM25 24-hour 2012"))
-#cleaned_list contains list items 1-20, corresponding to years 1999-2018. Rows in each table correspond to specific monitor's annual aggregated PM2.5 measurement.
+view(annual_conc_by_monitor_2000)
+#cleaned_list contains list items 1-19, corresponding to years 2000-2018. Rows in each table correspond to specific monitor's annual aggregated PM2.5 measurement.
 ```
 ####For loop to iterate through all the tables; POC = 1, at least 75% observations for that year, and select for no events or events excluded monitors (at least for now)
 ```{r}
@@ -1693,9 +1690,9 @@ native_avgdec[2,"movave"] <- mean(c(native_avgdec$annual_mean_all[1],
 native_avgdec$State_Name <- "Average Concentration across all States"
 native_avgdec$county_type <- "American Indian"
 native_avgdec <- native_avgdec %>% dplyr::select(year, State_Name, annual_mean_all, movave, county_type)
-# make list with both df
-dplyr::bind_rows(native_exp_final,native_avgdec)
 
+native_exp_final
+view(native_exp_final)
 # PLOT
 native_exp_plot_movavg <- ggplot() + 
   geom_line(data = native_exp_final,
@@ -1832,7 +1829,7 @@ nonnative_exp_final$year <- substr(nonnative_exp_final$year, 3, 4)
 nonnative_exp_final$year <- as.factor(nonnative_exp_final$year)
 #fill in NAs in movave column; have first year be the first year, 2nd year be 2 year moving avg
 nonnative_exp_final$county_type <- "Non-American Indian"
-
+nonnative_exp_final
 # df for average decline, to join with table
 nonnative_avgdec <- aggregate(annual_mean_all~year,
           data=nonnative_exp_final,
@@ -2046,6 +2043,7 @@ p3
 ```{r}
 # Separate out data of non-native counties:
 nonnative_modelpm <- model_PM25 %>% filter(county_type == 0)
+# model_PM25 <- model_PM25 %>% dplyr::rename(Year = year)
 # Join with data to get state acronyms
 nonnative_modelpm <- nonnative_modelpm %>% 
   dplyr::select(County, Year, PM25, State)
@@ -2087,7 +2085,7 @@ nonnative_modelpm_final
 nonnative_modelpm_final$Year <- substr(nonnative_modelpm_final$Year, 3, 4)
 nonnative_modelpm_final$Year <- as.factor(nonnative_modelpm_final$Year)
 #fill in NAs in movave column; have first Year be the first Year, 2nd Year be 2 Year moving avg
-nonnative_modelpm_final$county_type <- "American Indian"
+nonnative_modelpm_final$county_type <- "Non-AI"
 
 # df for average decline, to join with table
 nonnative_avgdec_model <- aggregate(PM25~Year,
@@ -2103,7 +2101,7 @@ nonnative_avgdec_model[2,"movave"] <- mean(c(nonnative_avgdec_model$PM25[1],
 
 # dummy columns
 nonnative_avgdec_model$State_Name <- "Average Concentration across all States"
-nonnative_avgdec_model$county_type <- "American Indian"
+nonnative_avgdec_model$county_type <- "Non-AI"
 nonnative_avgdec_model <- nonnative_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
 # make list with both df
 dplyr::bind_rows(nonnative_modelpm_final,nonnative_avgdec_model)
