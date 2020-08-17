@@ -527,6 +527,7 @@ urban_rural_counties_2013$County <- as.factor(urban_rural_counties_2013$County)
 urban_rural_counties_2013$land_use <- as.factor(urban_rural_counties_2013$land_use)
 
 # Population Density Data; downloaded from US Census 
+# https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902
 census_pop_density <- read.csv("census_2010_pop_density.csv")
 head(census_pop_density)
 
@@ -592,7 +593,7 @@ eparegions$State <- as.numeric(eparegions$State)
 eparegions
 
 # Join altogether
-covariates <- anti_join(urban_rural_counties_2013, census_pop_density) %>%
+covariates <- inner_join(urban_rural_counties_2013, census_pop_density) %>%
   inner_join(urban_rural_counties_2013)
 covariates
 view(urban_rural_counties_2013)
