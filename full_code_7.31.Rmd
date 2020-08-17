@@ -70,26 +70,26 @@ I've included them in the data folder as csv files since they were a bit of a ha
 
 ```{r}
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/EPA_data_1999_2018")
-annual_conc_by_monitor_1999 <- read.csv("annual_conc_by_monitor_1999.csv")
-annual_conc_by_monitor_2000 <- read.csv("annual_conc_by_monitor_2000.csv")
-annual_conc_by_monitor_2001 <- read.csv("annual_conc_by_monitor_2001.csv")
-annual_conc_by_monitor_2002 <- read.csv("annual_conc_by_monitor_2002.csv")
-annual_conc_by_monitor_2003 <- read.csv("annual_conc_by_monitor_2003.csv")
-annual_conc_by_monitor_2004 <- read.csv("annual_conc_by_monitor_2004.csv")
-annual_conc_by_monitor_2005 <- read.csv("annual_conc_by_monitor_2005.csv")
-annual_conc_by_monitor_2006 <- read.csv("annual_conc_by_monitor_2006.csv")
-annual_conc_by_monitor_2007 <- read.csv("annual_conc_by_monitor_2007.csv")
-annual_conc_by_monitor_2008 <- read.csv("annual_conc_by_monitor_2008.csv")
-annual_conc_by_monitor_2009 <- read.csv("annual_conc_by_monitor_2009.csv")
-annual_conc_by_monitor_2010 <- read.csv("annual_conc_by_monitor_2010.csv")
-annual_conc_by_monitor_2011 <- read.csv("annual_conc_by_monitor_2011.csv")
-annual_conc_by_monitor_2012 <- read.csv("annual_conc_by_monitor_2012.csv")
-annual_conc_by_monitor_2013 <- read.csv("annual_conc_by_monitor_2013.csv")
-annual_conc_by_monitor_2014 <- read.csv("annual_conc_by_monitor_2014.csv")
-annual_conc_by_monitor_2015 <- read.csv("annual_conc_by_monitor_2015.csv")
-annual_conc_by_monitor_2016 <- read.csv("annual_conc_by_monitor_2016.csv")
-annual_conc_by_monitor_2017 <- read.csv("annual_conc_by_monitor_2017.csv")
-annual_conc_by_monitor_2018 <- read.csv("annual_conc_by_monitor_2018.csv")
+annual_conc_by_monitor_1999 <- read_csv("annual_conc_by_monitor_1999.csv")
+annual_conc_by_monitor_2000 <- read_csv("annual_conc_by_monitor_2000.csv")
+annual_conc_by_monitor_2001 <- read_csv("annual_conc_by_monitor_2001.csv")
+annual_conc_by_monitor_2002 <- read_csv("annual_conc_by_monitor_2002.csv")
+annual_conc_by_monitor_2003 <- read_csv("annual_conc_by_monitor_2003.csv")
+annual_conc_by_monitor_2004 <- read_csv("annual_conc_by_monitor_2004.csv")
+annual_conc_by_monitor_2005 <- read_csv("annual_conc_by_monitor_2005.csv")
+annual_conc_by_monitor_2006 <- read_csv("annual_conc_by_monitor_2006.csv")
+annual_conc_by_monitor_2007 <- read_csv("annual_conc_by_monitor_2007.csv")
+annual_conc_by_monitor_2008 <- read_csv("annual_conc_by_monitor_2008.csv")
+annual_conc_by_monitor_2009 <- read_csv("annual_conc_by_monitor_2009.csv")
+annual_conc_by_monitor_2010 <- read_csv("annual_conc_by_monitor_2010.csv")
+annual_conc_by_monitor_2011 <- read_csv("annual_conc_by_monitor_2011.csv")
+annual_conc_by_monitor_2012 <- read_csv("annual_conc_by_monitor_2012.csv")
+annual_conc_by_monitor_2013 <- read_csv("annual_conc_by_monitor_2013.csv")
+annual_conc_by_monitor_2014 <- read_csv("annual_conc_by_monitor_2014.csv")
+annual_conc_by_monitor_2015 <- read_csv("annual_conc_by_monitor_2015.csv")
+annual_conc_by_monitor_2016 <- read_csv("annual_conc_by_monitor_2016.csv")
+annual_conc_by_monitor_2017 <- read_csv("annual_conc_by_monitor_2017.csv")
+annual_conc_by_monitor_2018 <- read_csv("annual_conc_by_monitor_2018.csv")
 ```
 ###Filter out EPA PM2.5 Annual Data
 ####Make list of all tables to iterate through
@@ -127,10 +127,12 @@ view(annual_conc_by_monitor_2012 %>% filter(Pollutant.Standard == "PM25 24-hour 
 view(annual_conc_by_monitor_2000)
 #cleaned_list contains list items 1-19, corresponding to years 2000-2018. Rows in each table correspond to specific monitor's annual aggregated PM2.5 measurement.
 ```
-####For loop to iterate through all the tables; POC = 1, at least 75% observations for that year, and select for no events or events excluded monitors (at least for now)
+####For loop to iterate through all the tables; POC = 1, at least 75% observations for that year, and select for no events or events excluded monitors (at least for now); 8/17/20 update: drop Canadian monitors first
 ```{r}
+view(cleaned_list[[1]])
 
 for (year in 1:19){
+  cleaned_list[[year]] <- cleaned_list[[year]] %>% filter(!str_detect(State.Code, "CC"))
   cleaned_list[[year]]$State.Code <- as.integer(as.character(cleaned_list[[year]]$State.Code))
   county_cleaned <- formatC(cleaned_list[[year]]$County.Code, width = 3, format = "d", flag = "0")
   state_cleaned <- formatC(cleaned_list[[year]]$State.Code, width = 2, format = "d", flag = "0")
@@ -149,6 +151,7 @@ for (year in 1:19){
                                 obs_percent >= 0.75,
                                 Event.Type == "No Events" | Event.Type == "Events Excluded") #make sure not to double count monitors because we restrict to POC == 1
 }
+
 ```
 
 ###Read in & clean IMPROVE rural network data
@@ -157,111 +160,102 @@ IMPROVE Monitoring Network data downloaded from here: http://views.cira.colostat
 I selected EPA PM2.5 MASS FRM (88101) Daily, 2000-2018, and clipped it (PM2_5_1999_2018_rural_clipped.txt). I forgot to download the data the first time with geolocation information so the second imported dataset (IMPROVE_location_tbl) has the lat/lon coordinates, which I joined to the first dataset.
 
 ```{r}
+#Step 0: Read in raw data (each row represents a single daily observation for a monitor location)
 PM2_5_1999_2018_rural_clipped<-read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/PM2_5_1999_2018_rural_clipped.txt", sep="")
-#Aggregate daily to annual data
-#Step 1: only keep the year in the date columns, to make it easier to aggregate
+
+#Goal: Aggregate daily to annual data
+
+#Step 1: Create year column from date column and append to raw data; replace -999 with NAs, clean up format of date column
 
 #1a: create character vector 'year', to add to data table as a separate column; taking the last 4 characters of the date for the year
 year <- str_sub(PM2_5_1999_2018_rural_clipped$Date, -4)
-#1b: paste character vector year into datatable
+
+#1b: paste character vector year into raw data df; just having the year (and not full date) for each observation will make it easier to aggregate to annual values
 PM2_5_1999_2018_rural_clipped$Year <- paste0(year)
-#1c: replace -999 with NAs
+
+#1c: replace -999 with NAs. Note that raw data contains rows for observations with NA concentrations; therefore even though monitor was operating, there is missing data for those monitors on those days.
 PM2_5_1999_2018_rural_clipped$MF.Value <- replace(PM2_5_1999_2018_rural_clipped$MF.Value, 
                                                   which(PM2_5_1999_2018_rural_clipped$MF.Value < 0), NA)
-filter(PM2_5_1999_2018_rural_clipped,
-       is.na(MF.Value)) #there are NAs now!
+# filter(PM2_5_1999_2018_rural_clipped,
+#        is.na(MF.Value)) #to check: there are NAs now!
 
-#convert date column from factor to date format
+#1d: convert date column from factor to date format
 PM2_5_1999_2018_rural_clipped$Date <- as.Date(PM2_5_1999_2018_rural_clipped$Date,
                                               "%m/%d/%Y")
 PM2_5_1999_2018_rural_clipped <- subset.data.frame(PM2_5_1999_2018_rural_clipped,
                                                    POC == 1)
-#new column of days between dates
+
+#Step 2: Create annualized df from this daily raw data, each row represents monitor and study year and the number of days between scheduled observations. 
+#2a: Create New Dataframe (IMPROVE_interval) with column of number of days between observations. Still same number of rows as original dataset, just with a new column called Between.
 IMPROVE_interval <- PM2_5_1999_2018_rural_clipped %>% mutate(Between=as.numeric(c(diff(Date),0)))
 
-#aggregate each SiteCode and Year by median days between
+#2b: aggregate each SiteCode and Year by median days between. Should be fewer rows because data is now annualized.
 IMPROVE_interval <- aggregate(Between ~ SiteCode + Year,
                                     data = IMPROVE_interval,
                                     FUN = median) 
 IMPROVE_interval
 
-#clean up df to just only include sitecode, year, and days between measurements 
-IMPROVE_interval <- IMPROVE_interval %>% subset(select = c(SiteCode,
-                                                           Year,
-                                                           Between))
-
-#Compare IMPROVE_interval to number of total observations in each year (8/15/20 edit: NEED TO NA.OMIT ORIGINAL DATA; THE NUMBER OF OBSERVATIONS CANNOT INCLUDE OBSERVATION DAYS WITH NA FOR MF.VALUE FIELD)
+#Step 3: Compare IMPROVE_interval to number of actual observations in each year  for each monitor.
+#3a: create new df (IMPROVE_monitor_observations) that summarises each monitor-year with additional column for number of actual valid observations with concentrations recorded. First we have to omit the NAs in the original data in order to summarize [n()] the rows for each SiteCode and Year pairing.
 IMPROVE_monitor_observations <- na.omit(PM2_5_1999_2018_rural_clipped) %>%
 	group_by(SiteCode, Year) %>%
 	dplyr::summarise(num_obs = n()) 
 IMPROVE_monitor_observations
 
-#merge the two tables and compare interval with total observations for each monitor and year respectively
-#need to make a new column in both that combines monitor name with year as an ID
+#3b: make a new column in dfs IMPROVE_interval and IMPROVE_monitor_observations that combines monitor name with year as an ID. merge the two df and compare intervals with total observations for each monitor and year into a new df, IMPROVE_check_interval
 IMPROVE_monitor_observations$ID <- paste(IMPROVE_monitor_observations$SiteCode,
                                          IMPROVE_monitor_observations$Year)
 IMPROVE_interval$ID <- paste(IMPROVE_interval$SiteCode,
                              IMPROVE_interval$Year)
 
-IMPROVE_check_interval <- merge(IMPROVE_monitor_observations,
-                                IMPROVE_interval,
-                                by = "ID")
-#create column with number of days expected (365/Between multiplied by 0.75), to compare with observed
+IMPROVE_check_interval <- inner_join(IMPROVE_monitor_observations,
+                                IMPROVE_interval)
+IMPROVE_check_interval
+
+#3c: create column in new df with number of days expected (365/Between multiplied by 0.75), to compare with observed
 IMPROVE_check_interval$exp_obs <- paste(0.75*365/IMPROVE_check_interval$Between)
 IMPROVE_check_interval$exp_obs <- as.integer(IMPROVE_check_interval$exp_obs)
-# IMPROVE_check_interval %>% filter( == "AGTI1")
-view(IMPROVE_check_interval)
-#filter for values that meet 75% of observed threshold
+IMPROVE_check_interval
+
+#Step 4: filter for values that meet 75% of observed threshold and save as new df IMPROVE_filtered
 IMPROVE_filtered <- IMPROVE_check_interval %>% filter(num_obs > exp_obs)
 
-#Now join this cleaned list of monitors that meet threshold with original data, which we aggregate first
-#also need to make ID column for original data to join on
-#seems like aggregate gets rid of NA values automatically and some MF.Value rows are all NAs for certain monitors in certain years
-PM25_rural_annual = aggregate(MF.Value~SiteCode+Year,
+#Step 5: Join IMPROVE_filtered with annualized averages of original data, to get the estimates from monitor-years we include that meet our inclusion criteria.
+
+#5a: aggregate raw data df by monitor location and year, create ID column so it has that in common with IMPROVE_filtered for later join
+#Note: seems like aggregate gets rid of NA values automatically and some MF.Value rows are all NAs for certain monitors in certain years
+PM25_rural_annual <- aggregate(MF.Value~SiteCode+Year,
                               data = PM2_5_1999_2018_rural_clipped,
                               FUN = mean)
 PM25_rural_annual$ID <- paste(PM25_rural_annual$SiteCode,
                               PM25_rural_annual$Year)
+PM25_rural_annual 
 
-PM25_rural_annual <- merge(PM25_rural_annual,
-                           IMPROVE_filtered,
-                           by = "ID")
-#keep only necessary columns of monitor name, year, and recorded values
+#5b: join the filtered monitor dataset with the PM estimates dataset;keep only necessary columns of monitor name, year, and recorded values
+PM25_rural_annual <- inner_join(PM25_rural_annual,
+                           IMPROVE_filtered)
+
 PM25_rural_annual <- subset(PM25_rural_annual,
                             select = c(SiteCode, Year, MF.Value))
 PM25_rural_annual
 
-# 8/15/20 update: code checking to see why there are different number of rows in PM25_rural_annual and IMPROVE_filtered
-# it is because PM25_rural_annual (the original iteration in line 220) automatically filters out years with all NAs
-# can test na.omit on this too.
-# test2 <- na.omit(PM2_5_1999_2018_rural_clipped)
-test1 <- PM25_rural_annual #fewer columns than IMPROVE_filtered
-test1$ID<- paste(PM25_rural_annual$SiteCode,
-                 PM25_rural_annual$Year)
 
-anti_join(test1 %>% dplyr::select(ID), IMPROVE_filtered %>% dplyr::select(ID))
-difference <- anti_join(IMPROVE_filtered %>% dplyr::select(ID), test1 %>% dplyr::select(ID))
-PM25_rural_annual %>% filter(SiteCode == "ATLA1")
-
-
-#Join with geolocation table to have lat/lon, COUNTY
-
-# July 7 Note: I was dumb and didn't download the data above with Lat/Long coordinates. So I had to re-download it and join the two datasets.
-
-IMPROVE_location_tbl <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/IMPROVE_location_tbl.csv")
+#Step 6: Join with geolocation table to have lat/lon and county, to locate each monitor, and finalize df
+#6a: read in raw data, subset relevant columns to keep
+IMPROVE_location_tbl <- read_csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/IMPROVE_location_tbl.csv")
 IMPROVE_lat_lon <- subset(IMPROVE_location_tbl,
                           select = c(2,6,8,9))
-#Rename column Code to SiteCode to match other table
+#6b: Rename column Code to SiteCode to match other table
 colnames(IMPROVE_lat_lon)[colnames(IMPROVE_lat_lon)=="Code"] <- "SiteCode"
-#IMPROVE_lat_lon
+IMPROVE_lat_lon 
 
-#Join Tables (final IMPROVE table)
+#6c: Join Tables (final IMPROVE table)
 PM25_rural_locations <- merge(x=PM25_rural_annual,
-                              y=IMPROVE_lat_lon,
-                              by = "SiteCode")
-#Note: values range from 1-25 micrograms per meter cubed
+                              y=IMPROVE_lat_lon)
+max(PM25_rural_locations$MF.Value)
+#Note: values range from 0.88 and 22.6 micrograms per meter cubed
 
-#Manually geocode missing county FIPS values, exclude non-US monitors
+#6d: Manually geocode missing county FIPS values, exclude non-US monitors
 PM25_rural_locations <- PM25_rural_locations %>% 
   mutate(County = replace(County, 
                           SiteCode=='MAKA2',
@@ -282,7 +276,7 @@ PM25_rural_locations <- PM25_rural_locations %>%
          SiteCode!= "BYIS1",
          SiteCode!= "BALA1")
 
-#Add leading zero so that Counties have 5 characters total
+#6e: Add leading zero so that Counties have 5 characters total
 PM25_rural_locations$County <- as.integer(PM25_rural_locations$County) #convert to integer
 county_cleaned <- formatC(PM25_rural_locations$County, width = 5, format = "d", flag = "0")
 typeof(county_cleaned)
@@ -290,16 +284,12 @@ PM25_rural_locations <- cbind(PM25_rural_locations,
                               county_cleaned)
 PM25_rural_locations
 
-# Filter out 1999 values and values for HI and AL
+#6f: Filter out 1999 values and values for HI and AL
 PM25_rural_locations <- PM25_rural_locations %>% filter(Year != "1999") %>% 
   filter(!str_detect(county_cleaned, "^02")) %>%
   filter(!str_detect(county_cleaned, "^15"))
 view(PM25_rural_locations)
-
-# 8/15/20 Compare the two data frames for PM25_rural_locations to see why removing NAs decreases final df row count by over 100.
-comparison <- anti_join(PM25_rural_locations_more, PM25_rural_locations_less)
-comparison
-view(PM25_rural_locations_less)
+# Final df should have 2684 rows, for each monitor's annual mean PM2.5 per year.
 ```
 ###Monitor PM2.5 table for all years 1999-2018 (join EPA + IMPROVE)
 ```{r}
@@ -417,7 +407,7 @@ Outcome = PM2.5 concentration (monitor), PM2.5 concentration (model), PM2.5 cove
 ###2.1.1 Define Rural Cluster (Wallace et al.) Counties, extract PM2.5 values for sensitivity analysis
 ```{r}
 # Read in county data for rural clusters & extract PM2.5 data
-counties_cluster <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/clustershare.csv")
+counties_cluster <- read_csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/clustershare.csv")
 native_rural_counties <- subset.data.frame(counties_cluster,
                                            cluster.name =="Rural, American Indian")
 
@@ -516,7 +506,7 @@ reservation_counties <- reservation_counties %>% dplyr::select(GEOID) %>% dplyr:
 # Key: 1 = large central metro; 2 = large fringe metro; 3 = medium metro; 4 = small metro; 5 = micropolitan (population of at least 10,000 but less than 50,000); 6 = non-core
 # Basically 1-3 is urban, 4-6 is suburban/rural
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
-urban_rural_counties_2013 <- read.csv("urban_rural_counties_2013.csv")
+urban_rural_counties_2013 <- read_csv("urban_rural_counties_2013.csv")
 #add leading 0; first make column vector
 County <- formatC(urban_rural_counties_2013$FIPS.code, width = 5, format = "d", flag = "0")
 #append new County column vector
@@ -528,7 +518,7 @@ urban_rural_counties_2013$land_use <- as.factor(urban_rural_counties_2013$land_u
 
 # Population Density Data; downloaded from US Census 
 # https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902
-census_pop_density <- read.csv("census_2010_pop_density.csv")
+census_pop_density <- read_csv("census_2010_pop_density.csv")
 head(census_pop_density)
 
 #keep columns GCT_STUB.target.geo.id2, HD01, SUBHD0401, SUBHD0402 (population and housing density)
@@ -573,7 +563,7 @@ hh_income_census
 
 #Climate Zone data source: https://www.ncdc.noaa.gov/monitoring-references/maps/us-climate-regions.php?hc_location=ufi
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
-climatezonefips <- read.csv("climatezonefips.csv")
+climatezonefips <- read_csv("climatezonefips.csv")
 climatezonefips
 climatezonefips$FIPS <- as.numeric(climatezonefips$FIPS)
 climatezonefips <- subset(climatezonefips,
@@ -584,7 +574,7 @@ climatezonefips
 
 #EPA Regions : https://www.epa.gov/aboutepa/visiting-regional-office
 
-eparegions <- read.csv("eparegions.csv")
+eparegions <- read_csv("eparegions.csv")
 eparegions <- eparegions %>%
   dplyr::select(EPA_region, FIPS) %>%
   dplyr::rename(State = FIPS)
