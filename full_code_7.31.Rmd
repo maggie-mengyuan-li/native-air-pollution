@@ -70,26 +70,26 @@ I've included them in the data folder as csv files since they were a bit of a ha
 
 ```{r}
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/EPA_data_1999_2018")
-annual_conc_by_monitor_1999 <- read_csv("annual_conc_by_monitor_1999.csv")
-annual_conc_by_monitor_2000 <- read_csv("annual_conc_by_monitor_2000.csv")
-annual_conc_by_monitor_2001 <- read_csv("annual_conc_by_monitor_2001.csv")
-annual_conc_by_monitor_2002 <- read_csv("annual_conc_by_monitor_2002.csv")
-annual_conc_by_monitor_2003 <- read_csv("annual_conc_by_monitor_2003.csv")
-annual_conc_by_monitor_2004 <- read_csv("annual_conc_by_monitor_2004.csv")
-annual_conc_by_monitor_2005 <- read_csv("annual_conc_by_monitor_2005.csv")
-annual_conc_by_monitor_2006 <- read_csv("annual_conc_by_monitor_2006.csv")
-annual_conc_by_monitor_2007 <- read_csv("annual_conc_by_monitor_2007.csv")
-annual_conc_by_monitor_2008 <- read_csv("annual_conc_by_monitor_2008.csv")
-annual_conc_by_monitor_2009 <- read_csv("annual_conc_by_monitor_2009.csv")
-annual_conc_by_monitor_2010 <- read_csv("annual_conc_by_monitor_2010.csv")
-annual_conc_by_monitor_2011 <- read_csv("annual_conc_by_monitor_2011.csv")
-annual_conc_by_monitor_2012 <- read_csv("annual_conc_by_monitor_2012.csv")
-annual_conc_by_monitor_2013 <- read_csv("annual_conc_by_monitor_2013.csv")
-annual_conc_by_monitor_2014 <- read_csv("annual_conc_by_monitor_2014.csv")
-annual_conc_by_monitor_2015 <- read_csv("annual_conc_by_monitor_2015.csv")
-annual_conc_by_monitor_2016 <- read_csv("annual_conc_by_monitor_2016.csv")
-annual_conc_by_monitor_2017 <- read_csv("annual_conc_by_monitor_2017.csv")
-annual_conc_by_monitor_2018 <- read_csv("annual_conc_by_monitor_2018.csv")
+annual_conc_by_monitor_1999 <- read.csv("annual_conc_by_monitor_1999.csv")
+annual_conc_by_monitor_2000 <- read.csv("annual_conc_by_monitor_2000.csv")
+annual_conc_by_monitor_2001 <- read.csv("annual_conc_by_monitor_2001.csv")
+annual_conc_by_monitor_2002 <- read.csv("annual_conc_by_monitor_2002.csv")
+annual_conc_by_monitor_2003 <- read.csv("annual_conc_by_monitor_2003.csv")
+annual_conc_by_monitor_2004 <- read.csv("annual_conc_by_monitor_2004.csv")
+annual_conc_by_monitor_2005 <- read.csv("annual_conc_by_monitor_2005.csv")
+annual_conc_by_monitor_2006 <- read.csv("annual_conc_by_monitor_2006.csv")
+annual_conc_by_monitor_2007 <- read.csv("annual_conc_by_monitor_2007.csv")
+annual_conc_by_monitor_2008 <- read.csv("annual_conc_by_monitor_2008.csv")
+annual_conc_by_monitor_2009 <- read.csv("annual_conc_by_monitor_2009.csv")
+annual_conc_by_monitor_2010 <- read.csv("annual_conc_by_monitor_2010.csv")
+annual_conc_by_monitor_2011 <- read.csv("annual_conc_by_monitor_2011.csv")
+annual_conc_by_monitor_2012 <- read.csv("annual_conc_by_monitor_2012.csv")
+annual_conc_by_monitor_2013 <- read.csv("annual_conc_by_monitor_2013.csv")
+annual_conc_by_monitor_2014 <- read.csv("annual_conc_by_monitor_2014.csv")
+annual_conc_by_monitor_2015 <- read.csv("annual_conc_by_monitor_2015.csv")
+annual_conc_by_monitor_2016 <- read.csv("annual_conc_by_monitor_2016.csv")
+annual_conc_by_monitor_2017 <- read.csv("annual_conc_by_monitor_2017.csv")
+annual_conc_by_monitor_2018 <- read.csv("annual_conc_by_monitor_2018.csv")
 ```
 ###Filter out EPA PM2.5 Annual Data
 ####Make list of all tables to iterate through
@@ -242,7 +242,7 @@ PM25_rural_annual
 
 #Step 6: Join with geolocation table to have lat/lon and county, to locate each monitor, and finalize df
 #6a: read in raw data, subset relevant columns to keep
-IMPROVE_location_tbl <- read_csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/IMPROVE_location_tbl.csv")
+IMPROVE_location_tbl <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/IMPROVE_location_tbl.csv")
 IMPROVE_lat_lon <- subset(IMPROVE_location_tbl,
                           select = c(2,6,8,9))
 #6b: Rename column Code to SiteCode to match other table
@@ -337,8 +337,8 @@ This is the part that takes forever to run, you can download all the years' ncdf
 I've put one ncdf downloaded from the source for 2008 if you want to try running the code, and see if it matches up with my csv file!
 
 ```{r}
-# Source: Randall Martin's PM2.5 Model http://fizz.phys.dal.ca/~atmos/martin/?page_id=140
-
+# # Source: Randall Martin's PM2.5 Model http://fizz.phys.dal.ca/~atmos/martin/?page_id=140
+# 
 # #all counties shapefile
 # setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/cb_2018_us_county_500k")
 # counties_shp <- "cb_2018_us_county_500k.shp"
@@ -347,55 +347,163 @@ I've put one ncdf downloaded from the source for 2008 if you want to try running
 # #group all_counties by state fips, exclude territories and hawaii and alaska
 # all_counties <- all_counties %>% arrange(STATEFP) %>%
 #   filter(STATEFP != "02",
-#          STATEFP != "15")
-# unique(all_counties$STATEFP)
+#          STATEFP != "15",
+#          as.numeric(STATEFP) <= 56) 
+# all_counties
+# view(all_counties$STATEFP)
+# 
 # #create state fips key vector
 # state_fips <- fips(state.name, county = c())
-# 
+# state_fips
 # #remove hawaii and alaska (FIPS are 15 and 02)
 # state_fips <- state_fips[!(state_fips %in% c("02","15"))]
-# 
+# state_fips
 # #save each state's counties as separate sf's, in a list. the function below will iterate through all of these states.
 # state_list <- list(length(state_fips))
 # for (i in 1:length(state_fips)){
 #   state_list[[i]] <- all_counties %>%
 #     filter(STATEFP==state_fips[i])
 # }
+# state_list 
 # 
-# # read in ncdf as raster stack for example year: 2008
-# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25")
-# model_PM25_2008 <- raster("GWRwSPEC_PM25_NA_200801_200812-RH35.nc")
-# model_PM25_2008 <- stack(model_PM25_2008)
+# # 8/18/20: specify it for DC too!!!
+# DC_state_list <- all_counties %>%
+#     filter(STATEFP== "11")
 # 
-# # Make empty list to store model data, iterate through 48 states to extract mean PM2.5 concentrations
-# model_PM25_2008_counties <-list()
+# # # read in ncdf as raster stack for example year: 2008
+# # setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25")
+# # model_PM25_2008 <- raster("GWRwSPEC_PM25_NA_200801_200812-RH35.nc")
+# # model_PM25_2008 <- stack(model_PM25_2008)
+# # 
+# # # Make empty list to store model data, iterate through 48 states to extract mean PM2.5 concentrations
+# # model_PM25_2008_counties <-list()
+# # 
+# # # function to extract values from raster into counties shapefile
+# # extract_model <- function(list, nc, state_list, state_fips){
+# #    list[[i]] <- raster::extract(nc, state_list[[i]],
+# #                                 fun=mean, na.rm=TRUE, df=TRUE) #specify function = mean to extract mean concentrations
+# #    list[[i]]$County <- state_list[[i]]$COUNTYFP
+# #    list[[i]]$State <- state_fips[i]
+# #    list[[i]]$FIPS <- paste(list[[i]]$State,list[[i]]$County)
+# #    list[[i]]$FIPS <- str_replace_all(list[[i]]$FIPS, " ", "")
+# # }
+# # extract_model(model_PM25_2008_counties,
+# #               model_PM25_2008, state_list, state_fips) #state_list and state_fips are already a list and vector created above
 # 
-# # function to extract values from raster into counties shapefile
-# extract_model <- function(list, nc, state_list, state_fips){ 
-#    list[[i]] <- raster::extract(nc, state_list[[i]], 
-#                                 fun=mean, na.rm=TRUE, df=TRUE) #specify function = mean to extract mean concentrations
-#    list[[i]]$County <- state_list[[i]]$COUNTYFP
-#    list[[i]]$State <- state_fips[i]
-#    list[[i]]$FIPS <- paste(list[[i]]$State,list[[i]]$County)
-#    list[[i]]$FIPS <- str_replace_all(list[[i]]$FIPS, " ", "")
+# # 8/18/20 try running single extraction for DC for 2008
+# raster::extract(model_PM25_2008, DC_state_list,fun=mean, na.rm=TRUE, df=TRUE)
+# 
+# # read in all model PM25 datasets in a loop
+# model_PM25_raw <- list()
+# model_pm25_stack <- list()
+# model_names <- c("GWRwSPEC_PM25_NA_200001_200012-RH35.nc",
+#                  "GWRwSPEC.HEI.ELEVandURB_PM25_NA_200101_200112-RH35.nc",
+#                  "GWRwSPEC.HEI.ELEVandURB_PM25_NA_200201_200212-RH35.nc",
+#                  "GWRwSPEC.HEI.ELEVandURB_PM25_NA_200301_200312-RH35.nc",
+#                  "GWRwSPEC.HEI.ELEVandURB_PM25_NA_200401_200412-RH35.nc",
+#                  "GWRwSPEC.HEI.ELEVandURB_PM25_NA_200501_200512-RH35.nc",
+#                  "GWRwSPEC.HEI.ELEVandURB_PM25_NA_200601_200612-RH35.nc",
+#                  "GWRwSPEC.HEI.ELEVandURB_PM25_NA_200701_200712-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_200801_200812-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_200901_200912-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_201001_201012-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_201101_201112-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_201201_201212-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_201301_201312-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_201401_201412-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_201501_201512-RH35.nc",
+#                  "GWRwSPEC_PM25_NA_201601_201612-RH35.nc",
+#                  "GWRwSPEC.HEI_PM25_NA_201701_201712-RH35.nc",
+#                  "GWRwSPEC.HEI_PM25_NA_201801_201812-RH35.nc")
+# model_names[1]
+# setwd("/Volumes/Seagate Backup Plus Drive/Rotations/Ana/SHS_Air_Pollution/Data/PM25_model")
+# year <- 2000
+# for (i in 1:19){
+#   model_yr <- model_names[i]
+#   model_PM25_raw[[i]] <- raster(model_yr)
+#   model_pm25_stack[[i]] <- stack(model_PM25_raw[[i]])
+#   year <- year + 1
 # }
-# extract_model(model_PM25_2008_counties,
-#               model_PM25_2008, state_list, state_fips) #state_list and state_fips are already a list and vector created above
+# summary(model_pm25_stack)
+# 
+# # now try running all extractions for DC for all 19 study years
+# DC_modelPM25 <- list()
+# for (i in 1:19){
+#   DC_modelPM25[[i]] <- raster::extract(model_pm25_stack[[i]], DC_state_list,fun=mean, na.rm=TRUE, df=TRUE)
+# }
+# DC_modelPM25[[19]]
+# 
+# # manipulate table to be the same format as other model PM25 data
+# year <- 2000
+# for (i in 1:19){
+#   DC_modelPM25[[i]] <- DC_modelPM25[[i]] %>% dplyr::rename(FIPS = ID) %>%
+#     mutate(State = 11) %>% mutate(FIPS = 11001) %>% mutate(Year = year)
+#   year <- year + 1
+# }
+# 
+# DC_modelPM25
+# paste("DC_modelPM25_", year, ".csv", sep = "")
+# # Write out data in csv format
+# year <- 2000
+# setwd("/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25/DC_data")
+# for (i in 1:19){
+#   write_csv(DC_modelPM25[[i]],
+#           path = paste("DC_modelPM25_", year, ".csv", sep = ""))
+#   year <- year + 1
+# }
 ```
 
 ###Read in county model PM2.5 data
 ```{r}
-#Read in model data into list of length 19 (# study years)
+#Read in model data into list of length 19 (# study years) 
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25")
-model_PM25 <- list()
+model_PM25_noDC <- list()
 yr = 2000
 for (i in 1:19){
-  model_PM25[[i]] <- read_csv(file = paste('model_PM25_', yr, '.csv', sep = ''))
-  model_PM25[[i]] <- model_PM25[[i]] %>% dplyr::select(c(FIPS, PM25, State))
-  model_PM25[[i]]$Year <- yr
+  model_PM25_noDC[[i]] <- read_csv(file = paste('model_PM25_', yr, '.csv', sep = ''))
+  model_PM25_noDC[[i]] <- model_PM25_noDC[[i]] %>% dplyr::select(c(FIPS, PM25, State))
+  model_PM25_noDC[[i]]$Year <- yr
   yr <- yr + 1
 }
-model_PM25
+
+# 8/18/20 update: also read in DC model data
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25/DC_data")
+DC_modelPM25 <- list()
+yr = 2000
+for (i in 1:19){
+  DC_modelPM25[[i]] <- read_csv(file = paste("DC_modelPM25_", yr, ".csv", sep = ""))
+  DC_modelPM25[[i]] <- DC_modelPM25[[i]] %>% dplyr::select(c(FIPS, PM25, State))
+  DC_modelPM25[[i]]$Year <- yr
+  yr <- yr + 1
+}
+DC_modelPM25 
+# 8/18/20: join DC list data to model_PM25_noDC list data to make full model_PM25_list list data
+model_PM25_list <- list()
+yr = 2000
+for (i in 1:19){
+  model_PM25_list[[i]] <- rbind(model_PM25_noDC[[i]], DC_modelPM25[[i]])
+  yr <- yr + 1
+}
+
+# 8/18/20 edit: need to make a duplicate row for FIPS 51515
+yr = 2000
+model_PM25_full <- list()
+missing_51515 <- list()
+for (i in 1:19){
+  missing_51515[[i]] <- model_PM25_list[[i]] %>% filter(FIPS == 51019) #df with one row for intended bedford,VA pm2.5 value (a copy of bedford county PM2.5)
+  missing_51515[[i]]$FIPS <- gsub(51019, 51515, missing_51515[[i]]$FIPS) #sub in bedford city FIPS 51515 for bedford county 51019
+  model_PM25_full[[i]] <- rbind(model_PM25_list[[i]], missing_51515[[i]]) #append this to the model pm2.5 df for all study years
+  yr <- yr + 1 #next year in loop
+}
+
+# 8/18/20 edit: need to rename FIPS 46102 in the model PM2.5 data to match the FIPS 46113 in the other data
+yr = 2000
+for (i in 1:19){
+  model_PM25_full[[i]]$FIPS <- gsub("46102", "46113", model_PM25_full[[i]]$FIPS)
+  yr <- yr + 1
+}
+
+model_PM25_full
 ```
 
 #PART 2: ASSIGN EXPOSURE/COVARIATES/OUTCOME TO COUNTIES
@@ -407,7 +515,7 @@ Outcome = PM2.5 concentration (monitor), PM2.5 concentration (model), PM2.5 cove
 ###2.1.1 Define Rural Cluster (Wallace et al.) Counties, extract PM2.5 values for sensitivity analysis
 ```{r}
 # Read in county data for rural clusters & extract PM2.5 data
-counties_cluster <- read_csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/clustershare.csv")
+counties_cluster <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/clustershare.csv")
 native_rural_counties <- subset.data.frame(counties_cluster,
                                            cluster.name =="Rural, American Indian")
 
@@ -506,7 +614,7 @@ reservation_counties <- reservation_counties %>% dplyr::select(GEOID) %>% dplyr:
 # Key: 1 = large central metro; 2 = large fringe metro; 3 = medium metro; 4 = small metro; 5 = micropolitan (population of at least 10,000 but less than 50,000); 6 = non-core
 # Basically 1-3 is urban, 4-6 is suburban/rural
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
-urban_rural_counties_2013 <- read_csv("urban_rural_counties_2013.csv")
+urban_rural_counties_2013 <- read.csv("urban_rural_counties_2013.csv")
 #add leading 0; first make column vector
 County <- formatC(urban_rural_counties_2013$FIPS.code, width = 5, format = "d", flag = "0")
 #append new County column vector
@@ -518,7 +626,7 @@ urban_rural_counties_2013$land_use <- as.factor(urban_rural_counties_2013$land_u
 
 # Population Density Data; downloaded from US Census 
 # https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902
-census_pop_density <- read_csv("census_2010_pop_density.csv")
+census_pop_density <- read.csv("census_2010_pop_density.csv")
 head(census_pop_density)
 
 #keep columns GCT_STUB.target.geo.id2, HD01, SUBHD0401, SUBHD0402 (population and housing density)
@@ -563,7 +671,7 @@ hh_income_census
 
 #Climate Zone data source: https://www.ncdc.noaa.gov/monitoring-references/maps/us-climate-regions.php?hc_location=ufi
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
-climatezonefips <- read_csv("climatezonefips.csv")
+climatezonefips <- read.csv("climatezonefips.csv")
 climatezonefips
 climatezonefips$FIPS <- as.numeric(climatezonefips$FIPS)
 climatezonefips <- subset(climatezonefips,
@@ -574,7 +682,7 @@ climatezonefips
 
 #EPA Regions : https://www.epa.gov/aboutepa/visiting-regional-office
 
-eparegions <- read_csv("eparegions.csv")
+eparegions <- read.csv("eparegions.csv")
 eparegions <- eparegions %>%
   dplyr::select(EPA_region, FIPS) %>%
   dplyr::rename(State = FIPS)
@@ -583,7 +691,7 @@ eparegions$State <- as.numeric(eparegions$State)
 eparegions
 
 # Join altogether
-covariates <- inner_join(urban_rural_counties_2013, census_pop_density) %>%
+covariates <- inner_join(census_pop_density,hh_income_census) %>%
   inner_join(urban_rural_counties_2013)
 covariates
 view(urban_rural_counties_2013)
@@ -697,12 +805,12 @@ all_general_PM25
 ```{r}
 # extract values for main analysis AI counties
 library(tidyverse)
-model_PM25 <- do.call(rbind, model_PM25)
+model_PM25 <- do.call(rbind, model_PM25_full)
 model_PM25 <- model_PM25 %>% dplyr::rename(County=FIPS)
 model_PM25$State <- as.numeric(model_PM25$State)
+model_PM25$County <- as.character(model_PM25$County)
 model_PM25 <- inner_join(model_PM25, covariates)
 model_PM25 <- model_PM25 %>% inner_join(main_analysis_counties)
-view(model_PM25)
 ```
 
 
@@ -1644,7 +1752,7 @@ August 5 update: Example code to add multiple legend (source: https://stackoverf
 ```{r}
 # Read in state FIPS dataset
 setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data")
-state_fips <- read_csv("state_fips.csv")
+state_fips <- read.csv("state_fips.csv")
 state_fips <- state_fips %>% dplyr::select(State_Name, State)
 
 # Native counties (monitor)
@@ -1730,7 +1838,9 @@ native_exp_plot_movavg <- ggplot() +
 native_exp_plot_movavg 
 ```
 
-#### 8/5 Updated Plot for paper
+####8/18/20 Making an additional line adjusted for covariates
+
+#### 8/5/20 Updated Plot for paper
 ```{r}
 # PLOT with separate legends
 # og plot, no legend
