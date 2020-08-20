@@ -1738,7 +1738,7 @@ main_table_sd_rural
 
 I manually joined the two (all counties and rural counties) and just messed with the formatting in LaTeX a bit to make it all into one table. :)
 
-##3.4 Line graphs showing PM2.5 declines (monitor/model) by US state; 3 year Moving Averages
+##3.4 State Line Graphs showing PM2.5 declines (monitor/model); 3 year Moving Averages
 
 July 7 update: One major issue is that the Bolded Averaged line not showing up in legend; still need to figure out how to make a custom item in legend. Another major issues is that I need to figure out how to format both graphs (AI/non-AI) side by side for monitor and model data, with a common legend, in one plot.
 
@@ -1763,7 +1763,70 @@ native_ctyear_exp <- native_ctyear_exp %>%
 native_ctyear_exp$year <- as.factor(native_ctyear_exp$year)
 unique(native_ctyear_exp$State_Name)
 native_ctyear_exp <- native_ctyear_exp %>% inner_join(state_fips)
-native_ctyear_exp
+native_ctyear_exp #each row represents a county for a given study year's annual PM2.5 concentration
+# 8/19/20 Read out this data to send to Marianthi:
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/intermediate_data")
+write_csv(native_ctyear_exp,
+          "native_monitor_exp.csv")
+
+# 8/19/20 edit: making the adjusted trend line
+# Step 0: Try making unadjusted line first and makes sure it matches the average decline df below, namely:
+# native_avgdec <- aggregate(annual_mean_all~year,data=native_exp_final,FUN=mean)
+new_data <- data.frame("year" = 2000:2018)
+new_data$year <- as.factor(new_data$year) 
+monitor_ai_mod1 <- lm(annual_mean_all ~ year, data = native_ctyear_exp)
+summary(monitor_ai_mod1)
+adjPred_mod1 <- predict(monitor_ai_mod1, new_data)
+adjPred_mod1 #matches native_avgdec. success!
+
+# Step 1: make dataframe with AI monitor subset, covariates, and make cols for deciles of confounders
+monitor_ai_mod2_df <- native_ctyear_exp %>% inner_join(covariates)
+
+monitor_ai_mod2_df$popd_q <- cut(monitor_ai_mod2_df$pop_density, 
+                                 quantile(all_avgmon_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+
+monitor_ai_mod2_df$hhinc_q <- cut(monitor_ai_mod2_df$hh_income, 
+                                  quantile(all_avgmon_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+monitor_ai_mod2_df
+
+# # have a new_data for mod2 but need to aggregate across all years for the confounders
+# new_data_mod2 <- aggregate(cbind(popd_q, hhinc_q)~year, data = monitor_ai_mod2_df, FUN = mean)
+# new_data_mod2
+# Step 2: Run lm to get all the beta values
+monitor_ai_mod2 <- lm(annual_mean_all ~ year + popd_q + hhinc_q, data = monitor_ai_mod2_df)
+summary(monitor_ai_mod2)
+
+# Step 3: Run a predict to get adjusted prediction values based on these betas
+adjPred <- predict(monitor_ai_mod2, type = "terms")
+adjPred <- as.data.frame(adjPred) #save matrix as dataframe
+adjPred 
+# write out adjPred as csv for Marianthi//read it in
+# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/intermediate_data")
+# write_csv(adjPred,
+#           "adjPred.csv")
+# adjPred <- read_csv("adjPred.csv")
+# adjPred <- adjPred %>% dplyr::rename(PM = year) #rename year column to PM bc these are the differences in PM levels year to year
+
+# Check that attr(adjPred, "constant") and mean(native_ctyear_exp$annual_mean_all) are the same; they are not D:
+# adjPred 
+# attr(adjPred, "constant")
+# mean(native_ctyear_exp$annual_mean_all)
+# attr(adjPred, "constant") == mean(native_ctyear_exp$annual_mean_all)
+
+# adding globally averaged PM2.5 concentration back to adjPred values for each year
+names(adjPred)[1] <- "preds" #rename first column from year to preds
+annual_adjPred <- unique(adjPred$preds) #vector of 19 values for each year
+annual_adjPred <- data.frame("preds" = annual_adjPred) #vector to dataframe
+overall_mean <- mean(native_ctyear_exp$annual_mean_all)
+annual_adjPred <- annual_adjPred %>% mutate(adj_mean = preds + overall_mean) #column that adds global mean to predicted diffs
+
+view(annual_adjPred)
+overall_mean
+
+```
+
+
+```{r}
 # Aggregate to get an average exposure for each state per year
 native_ctyear_exp <- aggregate(annual_mean_all~year+State_Name,
           data=native_ctyear_exp,
@@ -1804,8 +1867,8 @@ native_exp_final$county_type <- "American Indian"
 
 # df for average decline, to join with table
 native_avgdec <- aggregate(annual_mean_all~year,
-          data=native_exp_final,
-          FUN=mean)
+                           data=native_exp_final,
+                           FUN=mean)
 native_avgdec$movave <- (native_avgdec$annual_mean_all + 
                                   lag(native_avgdec$annual_mean_all) + 
                                   lag(native_avgdec$annual_mean_all,2))/3
@@ -2375,103 +2438,103 @@ Note: I'll probably end up mapping it in ggplot2 for the paper, so this is just 
 
 8/5 Update: Map of native counties and ALL PM2.5 monitors
 ```{r}
-all_monitors <- do.call(rbind, PM25_all)
-all_unique_mon <- unique(all_monitors[c("Latitude", "Longitude")])
-# some fancy schmancy code to denote specific colors/shapes for map and legend symbols
-# different color polygons for the different county classifications and black points to symbolize locations of monitors
-colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
-labels <- c("Native Census Population >5% County", 
-                      "Rural Wallace et al. Cluster",
-                      "County within Reservation",
-            "PM2.5 Monitor")
-sizes <- c(10, 10, 10, 5)
-shapes <- c("square", "square", "square", "circle")
-borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
-addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
-          make_shapes <- function(colors, sizes, borders, shapes) {
-              shapes <- gsub("circle", "50%", shapes)
-              shapes <- gsub("square", "0%", shapes)
-              paste0(colors, "; width:", sizes, "px; height:", sizes, 
-                     "px; border:3px solid ", borders, "; border-radius:", shapes)
-          }
-          make_labels <- function(sizes, labels) {
-              paste0("<div style='display: inline-block;height: ", 
-                     sizes, "px;margin-top: 4px;line-height: ", 
-                     sizes, "px;'>", labels, "</div>")
-          }
-
-          legend_colors <- make_shapes(colors, sizes, borders, shapes)
-          legend_labels <- make_labels(sizes, labels)
-
-          return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
-                           position = "topright"))}
-native_allmon_map <- leaflet() %>%
-  addProviderTiles("CartoDB.PositronNoLabels") %>%
-  addPolygons(data = census_shp, color = "#8dd3c7",
-              fillOpacity = 0.8, weight = 3) %>%
-  addPolygons(data = cluster_shp, color = "#ffffb3", 
-              fillOpacity = 0.8, weight = 3) %>%
-  addPolygons(data = reservation_shp, color = "#fb8072",
-              fillOpacity = 0.8, weight = 3) %>%
-  addLegendCustom(colors, labels, sizes, shapes, borders,
-                  title = "American Indian Populated Counties") %>%
-  addCircleMarkers(data = all_unique_mon,
-                   lng = ~Longitude,
-                   lat = ~Latitude,
-                   radius = 1.5,
-                   stroke = FALSE, fillOpacity = 0.85,
-                   color = "black")
-native_allmon_map
+# all_monitors <- do.call(rbind, PM25_all)
+# all_unique_mon <- unique(all_monitors[c("Latitude", "Longitude")])
+# # some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# # different color polygons for the different county classifications and black points to symbolize locations of monitors
+# colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# labels <- c("Native Census Population >5% County", 
+#                       "Rural Wallace et al. Cluster",
+#                       "County within Reservation",
+#             "PM2.5 Monitor")
+# sizes <- c(10, 10, 10, 5)
+# shapes <- c("square", "square", "square", "circle")
+# borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+#           make_shapes <- function(colors, sizes, borders, shapes) {
+#               shapes <- gsub("circle", "50%", shapes)
+#               shapes <- gsub("square", "0%", shapes)
+#               paste0(colors, "; width:", sizes, "px; height:", sizes, 
+#                      "px; border:3px solid ", borders, "; border-radius:", shapes)
+#           }
+#           make_labels <- function(sizes, labels) {
+#               paste0("<div style='display: inline-block;height: ", 
+#                      sizes, "px;margin-top: 4px;line-height: ", 
+#                      sizes, "px;'>", labels, "</div>")
+#           }
+# 
+#           legend_colors <- make_shapes(colors, sizes, borders, shapes)
+#           legend_labels <- make_labels(sizes, labels)
+# 
+#           return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+#                            position = "topright"))}
+# native_allmon_map <- leaflet() %>%
+#   addProviderTiles("CartoDB.PositronNoLabels") %>%
+#   addPolygons(data = census_shp, color = "#8dd3c7",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = cluster_shp, color = "#ffffb3", 
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = reservation_shp, color = "#fb8072",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addLegendCustom(colors, labels, sizes, shapes, borders,
+#                   title = "American Indian Populated Counties") %>%
+#   addCircleMarkers(data = all_unique_mon,
+#                    lng = ~Longitude,
+#                    lat = ~Latitude,
+#                    radius = 1.5,
+#                    stroke = FALSE, fillOpacity = 0.85,
+#                    color = "black")
+# native_allmon_map
 ```
 
 
 Map of native counties and only PM2.5 monitors in native counties
 ```{r}
-# some fancy schmancy code to denote specific colors/shapes for map and legend symbols
-# different color polygons for the different county classifications and black points to symbolize locations of monitors
-colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
-labels <- c("Native Census Population >5% County", 
-                      "Rural Wallace et al. Cluster",
-                      "County within Reservation",
-            "PM2.5 Monitor")
-sizes <- c(10, 10, 10, 5)
-shapes <- c("square", "square", "square", "circle")
-borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
-addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
-          make_shapes <- function(colors, sizes, borders, shapes) {
-              shapes <- gsub("circle", "50%", shapes)
-              shapes <- gsub("square", "0%", shapes)
-              paste0(colors, "; width:", sizes, "px; height:", sizes, 
-                     "px; border:3px solid ", borders, "; border-radius:", shapes)
-          }
-          make_labels <- function(sizes, labels) {
-              paste0("<div style='display: inline-block;height: ", 
-                     sizes, "px;margin-top: 4px;line-height: ", 
-                     sizes, "px;'>", labels, "</div>")
-          }
-
-          legend_colors <- make_shapes(colors, sizes, borders, shapes)
-          legend_labels <- make_labels(sizes, labels)
-
-          return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
-                           position = "topright"))}
-native_counties_map <- leaflet() %>%
-  addProviderTiles("CartoDB.PositronNoLabels") %>%
-  addPolygons(data = census_shp, color = "#8dd3c7",
-              fillOpacity = 0.8, weight = 3) %>%
-  addPolygons(data = cluster_shp, color = "#ffffb3", 
-              fillOpacity = 0.8, weight = 3) %>%
-  addPolygons(data = reservation_shp, color = "#fb8072",
-              fillOpacity = 0.8, weight = 3) %>%
-  addLegendCustom(colors, labels, sizes, shapes, borders,
-                  title = "American Indian Populated Counties") %>%
-  addCircleMarkers(data = agg_native_mon,
-                   lng = ~Longitude,
-                   lat = ~Latitude,
-                   radius = 1.5,
-                   stroke = FALSE, fillOpacity = 0.85,
-                   color = "black")
-native_counties_map
+# # some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# # different color polygons for the different county classifications and black points to symbolize locations of monitors
+# colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# labels <- c("Native Census Population >5% County", 
+#                       "Rural Wallace et al. Cluster",
+#                       "County within Reservation",
+#             "PM2.5 Monitor")
+# sizes <- c(10, 10, 10, 5)
+# shapes <- c("square", "square", "square", "circle")
+# borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+#           make_shapes <- function(colors, sizes, borders, shapes) {
+#               shapes <- gsub("circle", "50%", shapes)
+#               shapes <- gsub("square", "0%", shapes)
+#               paste0(colors, "; width:", sizes, "px; height:", sizes, 
+#                      "px; border:3px solid ", borders, "; border-radius:", shapes)
+#           }
+#           make_labels <- function(sizes, labels) {
+#               paste0("<div style='display: inline-block;height: ", 
+#                      sizes, "px;margin-top: 4px;line-height: ", 
+#                      sizes, "px;'>", labels, "</div>")
+#           }
+# 
+#           legend_colors <- make_shapes(colors, sizes, borders, shapes)
+#           legend_labels <- make_labels(sizes, labels)
+# 
+#           return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+#                            position = "topright"))}
+# native_counties_map <- leaflet() %>%
+#   addProviderTiles("CartoDB.PositronNoLabels") %>%
+#   addPolygons(data = census_shp, color = "#8dd3c7",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = cluster_shp, color = "#ffffb3", 
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = reservation_shp, color = "#fb8072",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addLegendCustom(colors, labels, sizes, shapes, borders,
+#                   title = "American Indian Populated Counties") %>%
+#   addCircleMarkers(data = agg_native_mon,
+#                    lng = ~Longitude,
+#                    lat = ~Latitude,
+#                    radius = 1.5,
+#                    stroke = FALSE, fillOpacity = 0.85,
+#                    color = "black")
+# native_counties_map
 ```
 
 Old code for differentiating between monitors active for less than half or greater than or equal than half of study years below:
