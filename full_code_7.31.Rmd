@@ -1820,9 +1820,6 @@ annual_adjPred <- data.frame("preds" = annual_adjPred) #vector to dataframe
 overall_mean <- mean(native_ctyear_exp$annual_mean_all)
 annual_adjPred <- annual_adjPred %>% mutate(adj_mean = preds + overall_mean) #column that adds global mean to predicted diffs
 
-view(annual_adjPred)
-overall_mean
-
 ```
 
 
