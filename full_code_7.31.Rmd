@@ -45,7 +45,6 @@ library(readr)
 library(tigris)
 library(acs)
 library(ncdf4)
-library(raster)
 library(rasterVis)
 require(usmap)
 require(tictoc)
@@ -1813,13 +1812,27 @@ adjPred
 # mean(native_ctyear_exp$annual_mean_all)
 # attr(adjPred, "constant") == mean(native_ctyear_exp$annual_mean_all)
 
-# adding globally averaged PM2.5 concentration back to adjPred values for each year
+# Step 4: adding globally averaged PM2.5 concentration back to adjPred values for each year
 names(adjPred)[1] <- "preds" #rename first column from year to preds
 annual_adjPred <- unique(adjPred$preds) #vector of 19 values for each year
 annual_adjPred <- data.frame("preds" = annual_adjPred) #vector to dataframe
 overall_mean <- mean(native_ctyear_exp$annual_mean_all)
 annual_adjPred <- annual_adjPred %>% mutate(adj_mean = preds + overall_mean) #column that adds global mean to predicted diffs
 
+# Step 5: add column for 3-year moving average (average of that year and the two years before it)
+annual_adjPred$movave <- (annual_adjPred$adj_mean + 
+                                  lag(annual_adjPred$adj_mean) + 
+                                  lag(annual_adjPred$adj_mean,2))/3
+# 5b: fill in first year with just that first year value
+annual_adjPred[1,"movave"] <- annual_adjPred$adj_mean[1]
+# 5c: fill second year with avg from first and second year
+annual_adjPred[2,"movave"] <- mean(c(annual_adjPred$adj_mean[1],
+                                    annual_adjPred$adj_mean[2]))
+# 5d: ID columns for plotting
+annual_adjPred$State_Name <- "Adjusted Mean Concentration"
+annual_adjPred <- annual_adjPred %>% mutate("year" = factor(2000:2018))
+annual_adjPred$year <- as.factor(substr(annual_adjPred$year, 3, 4))
+annual_adjPred
 ```
 
 
@@ -1866,6 +1879,7 @@ native_exp_final$county_type <- "American Indian"
 native_avgdec <- aggregate(annual_mean_all~year,
                            data=native_exp_final,
                            FUN=mean)
+# code moving average column
 native_avgdec$movave <- (native_avgdec$annual_mean_all + 
                                   lag(native_avgdec$annual_mean_all) + 
                                   lag(native_avgdec$annual_mean_all,2))/3
@@ -1885,12 +1899,18 @@ view(native_exp_final)
 native_exp_plot_movavg <- ggplot() + 
   geom_line(data = native_exp_final,
             aes(x=year, y = movave,
-                group = State_Name, colour= State_Name)) +
+                group = State_Name, colour= State_Name),
+            color = "grey") + #each line = state mean
   geom_line(data=native_avgdec,
             aes(x=year, y=movave,
                 group=State_Name),
             color="black",
-            size = 1.25) +
+            size = 1.25) + #unadjusted line
+  geom_line(data= annual_adjPred,
+            aes(x=year, y=movave,
+                group=State_Name),
+            color = "purple",
+            size = 1.25) + #adjusted line
   ylim(0,20) +
   ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
   labs(title = "AI Populated Counties",
