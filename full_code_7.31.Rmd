@@ -1833,6 +1833,35 @@ annual_adjPred$State_Name <- "Adjusted Mean Concentration"
 annual_adjPred <- annual_adjPred %>% mutate("year" = factor(2000:2018))
 annual_adjPred$year <- as.factor(substr(annual_adjPred$year, 3, 4))
 annual_adjPred
+
+set.seed(28)
+x <- rnorm(1000, 10, 4)
+z <- rnorm(1000, 45, 10)
+
+y <- 2 + 0.5*x + 0.1*z + rnorm(1000, 0, 3)
+
+mod1 <- lm(y ~ x + z)
+summary(mod1)
+
+preds <- predict(mod1, type = "terms")
+head(preds)
+attributes(preds)$constant #one way to call overall mean
+attr(preds, "constant") #another way to call overall mean
+preds$constant
+mean(y)
+
+xcat <- cut(x, quantile(x, seq(0,1,0.1)), include.lowest = TRUE)
+class(xcat)
+
+mod2 <- lm(y ~ xcat + z)
+summary(mod2)
+
+preds2 <- predict(mod2, type = "terms")
+head(preds2)
+
+attr(preds2, "constant")
+
+plot((preds2[,1]+mean(y)), (preds[,1]+mean(y)))
 ```
 
 
@@ -1902,12 +1931,12 @@ native_exp_plot_movavg <- ggplot() +
                 group = State_Name, colour= State_Name),
             color = "grey") + #each line = state mean
   geom_line(data=native_avgdec,
-            aes(x=year, y=movave,
+            aes(x=year, y=annual_mean_all,
                 group=State_Name),
             color="black",
             size = 1.25) + #unadjusted line
   geom_line(data= annual_adjPred,
-            aes(x=year, y=movave,
+            aes(x=year, y=adj_mean,
                 group=State_Name),
             color = "purple",
             size = 1.25) + #adjusted line
