@@ -1739,6 +1739,7 @@ I manually joined the two (all counties and rural counties) and just messed with
 
 ##3.4 State Line Graphs showing PM2.5 declines (monitor/model)
 ### 8/21 update: plotting annual decline, not 3 year moving averages
+### 9/6 update: plotting adjusted lines w/ nested random effects!
 
 July 7 update: One major issue is that the Bolded Averaged line not showing up in legend; still need to figure out how to make a custom item in legend. Another major issues is that I need to figure out how to format both graphs (AI/non-AI) side by side for monitor and model data, with a common legend, in one plot.
 
@@ -1790,27 +1791,58 @@ monitor_ai_mod2_df
 # write_csv(monitor_ai_mod2_df, "monitor_ai_df.csv")
 
 # Step 2: Run lm to get all the beta values
-monitor_ai_mod2 <- lm(annual_mean_all ~ year + popd_q + hhinc_q, data = monitor_ai_mod2_df)
+# monitor_ai_mod2 <- lm(annual_mean_all ~ year + popd_q + hhinc_q, data = monitor_ai_mod2_df)
+# summary(monitor_ai_mod2)
+# 9/7 updated Step 2: Run mixed regression model to get all the beta values; for now just use gamm4
+monitor_ai_mod2 <- gamm4(annual_mean_all ~ as.factor(year) + popd_q + hhinc_q,
+                random =~(1|State/County),
+                data = monitor_ai_mod2_df)
 summary(monitor_ai_mod2)
 
-# Step 3: Run a predict to get adjusted prediction values based on these betas
-adjPred <- predict(monitor_ai_mod2, type = "terms")
-adjPred <- as.data.frame(adjPred) #save matrix as dataframe
-adjPred #each entry is the deviation from the overall mean for each year; it repeats every 18 entries to reflect the 19 different study years (1 is referent year 2000 so that is not an entry)
 
+# Step 3: Run a predict to get adjusted prediction values based on these betas
+adjPred <- predict(monitor_ai_mod2$gam, newdata = monitor_ai_mod2_df, type = "terms")[,1]
+adjPred <- as.data.frame(adjPred) #save matrix as dataframe
+adjPred #each entry is the deviation from the overall mean for each year; it repeats every 18 entries to reflect the 19 different study years (1 is referent year 2000 so that is not an entry) for counties with active monitors for all study years. each year has a unique value and this is the same across all counties
+
+### Extra: more on how predict works ###
+#### https://stackoverflow.com/questions/47486589/what-is-the-difference-between-type-response-terms-and-link-in-predict-f ####
+ldose <- rep(0:5, 2)
+numdead <- c(1, 4, 9, 13, 18, 20, 0, 2, 6, 10, 12, 16)
+sex <- factor(rep(c("M", "F"), c(6, 6)))
+SF <- cbind(numdead, numalive = 20-numdead)
+
+budworm.lg <- glm(SF ~ sex*ldose, family = binomial)
+summary(budworm.lg)
+SF
+sex
+ldose
+predict(budworm.lg, type = "link") # returns f(x)
+predict(budworm.lg, type = "response") # returns e^(f(x)), i.e. predicted probabilities
+predict(budworm.lg, type = "terms") # returns a matrix given fit of each observation on linear scale(??)
+
+```
+
+```{r}
 # Step 4: adding globally averaged PM2.5 concentration back to adjPred values for each year
 names(adjPred)[1] <- "preds" #rename first column from year to preds
 annual_adjPred <- unique(adjPred$preds) #vector of 19 values for each year
+nrow(annual_adjPred)
+# 9/6/20 Step 4a: last entry/row 19 value (0) needs to be first entry bc that is the referent 
+annual_adjPred <- lag(annual_adjPred) # gets rid of last entry, shifting everything back one position
+annual_adjPred[1] <- 0 #set first entry (originally NA) to 0 for referent
 annual_adjPred <- data.frame("preds" = annual_adjPred) #vector to dataframe
-overall_mean <- mean(native_ctyear_exp$annual_mean_all)
-annual_adjPred <- annual_adjPred %>% mutate(adj_mean = preds + overall_mean) #column that adds global mean to predicted diffs
-adjPred 
-annual_adjPred 
+annual_adjPred
 
-# Step 4b: Need to move 19th row of annual_adjPred to be 1st row because this actually represents the annual deviation of 2000 values from the overall mean (unique function does not work perfectly)
-annual_adjPred <- annual_adjPred %>% slice_tail() %>% #subset the last year row
-  mutate(year = "00") %>% bind_rows(annual_adjPred) %>% slice(1:(n()-1)) %>% #bind last year row up to first row, delete last row
-  mutate(year = new_data$year) #redo the year column so that it is in the correct order starting from 2000
+# Step 4b: add column with adjusted means for each study year (2000-2018; n=19)
+overall_mean <- mean(native_ctyear_exp$annual_mean_all)
+annual_adjPred <- annual_adjPred %>% mutate(adj_mean = preds + overall_mean) #column that adds global mean to predicted diffs for each year
+adjPred # original centered predictions around 0 for each county-year observation
+annual_adjPred # PM predictions adjusted by overall mean summarized for each year
+
+# Step 4c: Add in year ID column
+annual_adjPred <- annual_adjPred %>% 
+  mutate(year = new_data$year) 
 
 # Step 5: add column for 3-year moving average (average of that year and the two years before it)
 annual_adjPred$movave <- (annual_adjPred$adj_mean + 
@@ -1822,7 +1854,7 @@ annual_adjPred[1,"movave"] <- annual_adjPred$adj_mean[1]
 annual_adjPred[2,"movave"] <- mean(c(annual_adjPred$adj_mean[1],
                                     annual_adjPred$adj_mean[2]))
 # 5d: ID columns for plotting
-annual_adjPred$State_Name <- "Adjusted Mean Concentration"
+annual_adjPred$State_Name <- "Adjusted Mean (All States)"
 annual_adjPred <- annual_adjPred %>% mutate("year" = factor(2000:2018))
 annual_adjPred$year <- as.factor(substr(annual_adjPred$year, 3, 4))
 annual_adjPred
