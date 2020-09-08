@@ -2489,24 +2489,24 @@ annual_adjPred_mod_nai <- annual_adjPred_mod_nai %>% mutate(adj_mean = preds + o
 annual_adjPred_mod_nai # preds = original centered predictions around 0 for each county-year observation; adj_mean = PM predictions adjusted by overall mean summarized for each year
 
 # Step 4c: Add in year ID column
-annual_adjPred_mod_ai <- annual_adjPred_mod_ai %>% 
+annual_adjPred_mod_nai <- annual_adjPred_mod_nai %>% 
   mutate(year = new_data$year) 
-annual_adjPred_mod_ai 
+annual_adjPred_mod_nai 
 
 # Step 5: add column for 3-year moving average (average of that year and the two years before it)
-annual_adjPred_mod_ai$movave <- (annual_adjPred_mod_ai$adj_mean + 
-                                  lag(annual_adjPred_mod_ai$adj_mean) + 
-                                  lag(annual_adjPred_mod_ai$adj_mean,2))/3
+annual_adjPred_mod_nai$movave <- (annual_adjPred_mod_nai$adj_mean + 
+                                  lag(annual_adjPred_mod_nai$adj_mean) + 
+                                  lag(annual_adjPred_mod_nai$adj_mean,2))/3
 # 5b: fill in first year with just that first year value
-annual_adjPred_mod_ai[1,"movave"] <- annual_adjPred_mod_ai$adj_mean[1]
+annual_adjPred_mod_nai[1,"movave"] <- annual_adjPred_mod_nai$adj_mean[1]
 # 5c: fill second year with avg from first and second year
-annual_adjPred_mod_ai[2,"movave"] <- mean(c(annual_adjPred_mod_ai$adj_mean[1],
-                                    annual_adjPred_mod_ai$adj_mean[2]))
+annual_adjPred_mod_nai[2,"movave"] <- mean(c(annual_adjPred_mod_nai$adj_mean[1],
+                                    annual_adjPred_mod_nai$adj_mean[2]))
 # 5d: ID columns for plotting
-annual_adjPred_mod_ai$State_Name <- "Adjusted Mean (All States)"
-annual_adjPred_mod_ai <- annual_adjPred_mod_ai %>% mutate("year" = factor(2000:2018))
-annual_adjPred_mod_ai$year <- as.factor(substr(annual_adjPred_mod_ai$year, 3, 4))
-annual_adjPred_mod_ai
+annual_adjPred_mod_nai$State_Name <- "Adjusted Mean (All States)"
+annual_adjPred_mod_nai <- annual_adjPred_mod_nai %>% mutate("year" = factor(2000:2018))
+annual_adjPred_mod_nai$year <- as.factor(substr(annual_adjPred_mod_nai$year, 3, 4))
+annual_adjPred_mod_nai
 
 ```
 
@@ -2565,54 +2565,81 @@ nonnative_avgdec_model[2,"movave"] <- mean(c(nonnative_avgdec_model$PM25[1],
 nonnative_avgdec_model$State_Name <- "Average Concentration across all States"
 nonnative_avgdec_model$county_type <- "Non-AI"
 nonnative_avgdec_model <- nonnative_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
-# make list with both df
-dplyr::bind_rows(nonnative_modelpm_final,nonnative_avgdec_model)
 
-nonnative_model_movavg <- ggplot() + 
+# OLD MOVAVG PLOT
+# nonnative_model_movavg <- ggplot() + 
+#   geom_line(data = nonnative_modelpm_final,
+#             aes(x=Year, y = movave,
+#                 group = State_Name, colour= State_Name)) +
+#   geom_line(data=nonnative_avgdec_model,
+#             aes(x=Year, y=movave,
+#                 group=State_Name),
+#             color="black",
+#             size = 1.25) +
+#   ylim(0,20) +
+#   ylab(expression(paste("Annual ", PM[2.5], " Model Concentrations", " (", mu, "g/", m^3, ")"))) +
+#   labs(title = "Non-AI Populated Counties",
+#        x = "Year") + theme_linedraw()
+# nonnative_model_movavg 
+# boop_model <- nonnative_model_movavg + theme(legend.position="None") #get rid of legend to plot both graphs in the same screen
+# native_model_movavg
+
+# PLOT
+model_nai_timetrend <- ggplot() + 
   geom_line(data = nonnative_modelpm_final,
-            aes(x=Year, y = movave,
-                group = State_Name, colour= State_Name)) +
+            aes(x=Year, y = PM25,
+                group = State_Name, colour= State_Name),
+            color = "grey") + #each line = state mean
   geom_line(data=nonnative_avgdec_model,
-            aes(x=Year, y=movave,
+            aes(x=Year, y=PM25,
                 group=State_Name),
             color="black",
-            size = 1.25) +
+            size = 1.25) + #unadjusted line
+  geom_line(data= annual_adjPred_mod_nai,
+            aes(x=year, y=adj_mean,
+                group=State_Name),
+            color = "purple",
+            size = 1.25) + #adjusted line
   ylim(0,20) +
-  ylab(expression(paste("Annual ", PM[2.5], " Model Concentrations", " (", mu, "g/", m^3, ")"))) +
-  labs(title = "Non-AI Populated Counties",
-       x = "Year") + theme_linedraw()
-nonnative_model_movavg 
-boop_model <- nonnative_model_movavg + theme(legend.position="None") #get rid of legend to plot both graphs in the same screen
-native_model_movavg
+  ylab(expression(paste("Annual Modeled ", PM[2.5], " Concentrations", " (", mu, "g/", m^3, ")"))) +
+  labs(#title = "AI Populated Counties",
+       x = "Year") + theme_linedraw()  +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) 
+model_nai_timetrend 
 
-# Plot both on the same screen
-library(gridExtra)
-grid.arrange(native_model_movavg, boop_model, nrow=1)
+# customlabel inside graph
+grob_model_nai <- grobTree(textGrob("D", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+
+# Final Plot
+model_nai_timetrend + annotation_custom(grob_model_nai)
 ```
 
-#### 8/5 Updated Plot with Multiple Legends
+#### INACTIVE 8/5 Updated Plot with Multiple Legends
 ```{r}
-# PLOT with separate legends
-# og plot, no legend
-p4 <- ggplot() + 
-  geom_line(data = nonnative_modelpm_final,
-            aes(x=Year, y = movave,
-                group = State_Name, colour= State_Name)) + theme_linedraw() +
-  geom_line(data=nonnative_avgdec_model,
-            aes(x=Year, y=movave,
-                group=State_Name),
-            color="black",
-            size = 1.25) +
-  ylim(0,20) +
-  ylab(expression(paste("Mean Modeled ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
-  labs(title = "D",
-       x = "Year")  + 
-  theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14))  + theme(legend.position="None")
-
-# FOR PAPER: just need plot
-p4
+# # PLOT with separate legends
+# # og plot, no legend
+# p4 <- ggplot() + 
+#   geom_line(data = nonnative_modelpm_final,
+#             aes(x=Year, y = movave,
+#                 group = State_Name, colour= State_Name)) + theme_linedraw() +
+#   geom_line(data=nonnative_avgdec_model,
+#             aes(x=Year, y=movave,
+#                 group=State_Name),
+#             color="black",
+#             size = 1.25) +
+#   ylim(0,20) +
+#   ylab(expression(paste("Mean Modeled ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+#   labs(title = "D",
+#        x = "Year")  + 
+#   theme(plot.title = element_text(size = 20),
+#         axis.title = element_text(size = 16),
+#         axis.text = element_text(size = 14))  + theme(legend.position="None")
+# 
+# # FOR PAPER: just need plot
+# p4
 ```
 
 ## 3.5 Descriptive Map of all the AI Counties
