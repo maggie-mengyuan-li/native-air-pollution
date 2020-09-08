@@ -1862,7 +1862,7 @@ annual_adjPred
 
 
 ```{r}
-# Aggregate to get an average exposure for each state per year
+# Aggregate to get an average exposure for each state per year (unadjusted)
 native_state_annual_mean <- aggregate(annual_mean_all~year+State_Name,
           data=native_ctyear_exp,
           FUN=mean)
@@ -1936,7 +1936,7 @@ native_exp_plot_movavg <- ggplot() +
                 group=State_Name),
             color = "purple",
             size = 1.25) + #adjusted line
-  ylim(0,20) +
+  ylim(0,17.5) +
   ylab(expression(paste("Annual ", PM[2.5], " Monitor Concentrations", " (", mu, "g/", m^3, ")"))) +
   labs(title = "AI Populated Counties",
        x = "Year") + theme_linedraw()  
@@ -2050,12 +2050,15 @@ monitor_non_ai_mod2_df
 # setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/intermediate_data")
 # write_csv(monitor_non_ai_mod2_df, "monitor_non_ai_df.csv")
 
-# Step 2: Run lm to get all the beta values
-monitor_non_ai_mod2 <- lm(annual_mean_all ~ year + popd_q + hhinc_q, data = monitor_non_ai_mod2_df)
+# 9/7 updated Step 2: Run mixed regression model to get all the beta values; for now just use gamm4
+monitor_non_ai_mod2 <- gamm4(annual_mean_all ~ as.factor(year) + popd_q + hhinc_q,
+                random =~(1|State/County),
+                data = monitor_non_ai_mod2_df)
 summary(monitor_non_ai_mod2)
 
 # Step 3: Run a predict to get adjusted prediction values based on these betas
-adjPred_non_ai <- predict(monitor_non_ai_mod2, type = "terms")
+adjPred_non_ai <- predict(monitor_non_ai_mod2$gam, 
+                          newdata = monitor_non_ai_mod2_df, type = "terms")[,1]
 adjPred_non_ai <- as.data.frame(adjPred_non_ai) #save matrix as dataframe
 adjPred_non_ai 
 
@@ -2077,6 +2080,21 @@ annual_adjPred_non_ai$State_Name <- "Adjusted Mean Concentration"
 annual_adjPred_non_ai <- annual_adjPred_non_ai %>% mutate("year" = factor(2000:2018))
 annual_adjPred_non_ai$year <- as.factor(substr(annual_adjPred_non_ai$year, 3, 4))
 annual_adjPred_non_ai
+
+# Step 2: Run lm to get all the beta values
+# monitor_ai_mod2 <- lm(annual_mean_all ~ year + popd_q + hhinc_q, data = monitor_ai_mod2_df)
+# summary(monitor_ai_mod2)
+# 9/7 updated Step 2: Run mixed regression model to get all the beta values; for now just use gamm4
+monitor_ai_mod2 <- gamm4(annual_mean_all ~ as.factor(year) + popd_q + hhinc_q,
+                random =~(1|State/County),
+                data = monitor_ai_mod2_df)
+summary(monitor_ai_mod2)
+
+
+# Step 3: Run a predict to get adjusted prediction values based on these betas
+adjPred <- predict(monitor_ai_mod2$gam, newdata = monitor_ai_mod2_df, type = "terms")[,1]
+adjPred <- as.data.frame(adjPred) #save matrix as dataframe
+adjPred #each entry is the deviation from the overall mean for each year; it repeats every 18 entries to reflect the 19 different study years (1 is referent year 2000 so that is not an entry) for counties with active monitors for all study years. each year has a unique value and this is the same across all counties
 ```
 
 ```{r}
