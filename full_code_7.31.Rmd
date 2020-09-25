@@ -60,6 +60,7 @@ library(ggpubr)
 library(grid)
 library(cowplot)
 library(patchwork)
+library(gamm4)
 ```
 #PART 1: DATA CLEANING (MONITOR & MODEL)
 ##1.1 Monitor Data
@@ -1807,20 +1808,20 @@ adjPred #each entry is the deviation from the overall mean for each year; it rep
 
 ### Extra: more on how predict works ###
 #### https://stackoverflow.com/questions/47486589/what-is-the-difference-between-type-response-terms-and-link-in-predict-f ####
-ldose <- rep(0:5, 2)
-numdead <- c(1, 4, 9, 13, 18, 20, 0, 2, 6, 10, 12, 16)
-sex <- factor(rep(c("M", "F"), c(6, 6)))
-SF <- cbind(numdead, numalive = 20-numdead)
-
-budworm.lg <- glm(SF ~ sex*ldose, family = binomial)
-summary(budworm.lg)
-SF
-sex
-ldose
-predict(budworm.lg, type = "link") # returns f(x)
-predict(budworm.lg, type = "response") # returns e^(f(x)), i.e. predicted probabilities
-predict(budworm.lg, type = "terms") # returns a matrix given fit of each observation on linear scale(??)
-
+# ldose <- rep(0:5, 2)
+# numdead <- c(1, 4, 9, 13, 18, 20, 0, 2, 6, 10, 12, 16)
+# sex <- factor(rep(c("M", "F"), c(6, 6)))
+# SF <- cbind(numdead, numalive = 20-numdead)
+# 
+# budworm.lg <- glm(SF ~ sex*ldose, family = binomial)
+# summary(budworm.lg)
+# SF
+# sex
+# ldose
+# predict(budworm.lg, type = "link") # returns f(x)
+# predict(budworm.lg, type = "response") # returns e^(f(x)), i.e. predicted probabilities
+# predict(budworm.lg, type = "terms") # returns a matrix given fit of each observation on linear scale(??)
+mean(all_ctyear_exp$annual_mean_all)
 ```
 
 ```{r}
