@@ -11,14 +11,12 @@ We are plotting adjusted annual national PM2.5 averages by using our fitted LMER
 
 ###3.4.1 Monitor Data
 
-####3.4.1.1 AI counties: monitor data
-
 ```{r Create Dataframe of annual mean PM2.5 adjusted in all counties}
 # Read in state FIPS dataset
 state_fips <- read_csv("./Data/state_fips.csv")
 state_fips <- state_fips %>% dplyr::select(State_Name, State)
 
-# Define df for native counties (monitor)
+# Define subsetted df for native counties (monitor) to be used in later chunks for unadjusted line
 native_ctyear_exp <- all_ctyear_exp %>% filter(county_type == 1)
 # Join with data to get state acronyms
 native_ctyear_exp <- native_ctyear_exp %>% 
@@ -26,9 +24,9 @@ native_ctyear_exp <- native_ctyear_exp %>%
 native_ctyear_exp$year <- as.factor(native_ctyear_exp$year)
 unique(native_ctyear_exp$State_Name)
 native_ctyear_exp <- native_ctyear_exp %>% inner_join(state_fips)
-native_ctyear_exp #each row represents a county for a given study year's annual PM2.5 concentration
+native_ctyear_exp #each row represents a county-year annual PM2.5 concentration
 
-# Define df for non-native counties (monitor)
+# Define subsetted df for non-native counties (monitor) to be used in later chunks for unadjusted line
 nonnative_ctyear_exp <- all_ctyear_exp %>% filter(county_type == 0)
 # Join with data to get state acronyms
 nonnative_ctyear_exp <- nonnative_ctyear_exp %>% 
@@ -301,331 +299,8 @@ grob_nai_monitor <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,gp=gpar(fonts
 monitor_nai_timetrend + annotation_custom(grob_nai_monitor)
 ```
 
-```{r}
-# 8/19/20 edit: making the adjusted trend line
-# Step 0:Try making unadjusted line first and makes sure it matches the average decline df below, namely:
-# native_avgdec <- aggregate(annual_mean_all~year,data=native_exp_final,FUN=mean)
-# new_data <- data.frame("year" = 2000:2018)
-# new_data$year <- as.factor(new_data$year) 
-# monitor_ai_mod1 <- lm(annual_mean_all ~ year, data = native_ctyear_exp)
-# summary(monitor_ai_mod1)
-# adjPred_mod1 <- predict(monitor_ai_mod1, new_data)
-# adjPred_mod1 #matches native_avgdec. success!
-
-# Step 1: make dataframe with AI monitor subset, covariates, and make cols for deciles of confounders
-monitor_ai_mod2_df <- native_ctyear_exp %>% inner_join(covariates)
-
-monitor_ai_mod2_df$popd_q <- cut(monitor_ai_mod2_df$pop_density, 
-                                 quantile(all_avgmon_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
-
-monitor_ai_mod2_df$hhinc_q <- cut(monitor_ai_mod2_df$hh_income, 
-                                  quantile(all_avgmon_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
-monitor_ai_mod2_df
-
-# 9/7 updated Step 2: Run mixed regression model to get all the beta values; for now just use gamm4
-monitor_ai_mod2 <- gamm4(annual_mean_all ~ as.factor(year) + popd_q + hhinc_q,
-                random =~(1|State/County),
-                data = monitor_ai_mod2_df)
-summary(monitor_ai_mod2)
-
-
-# Step 3: Run a predict to get adjusted prediction values based on these betas
-adjPred <- predict(monitor_ai_mod2$gam, newdata = monitor_ai_mod2_df, type = "terms")[,1]
-adjPred <- as.data.frame(adjPred) #save matrix as dataframe
-adjPred #each entry is the deviation from the overall mean for each year; it repeats every 18 entries to reflect the 19 different study years (1 is referent year 2000 so that is not an entry) for counties with active monitors for all study years. each year has a unique value and this is the same across all counties
-```
-
-```{r}
-# Step 4: adding globally averaged PM2.5 concentration back to adjPred values for each year
-names(adjPred)[1] <- "preds" #rename first column from year to preds
-annual_adjPred <- unique(adjPred$preds) #vector of 19 values for each year
-nrow(annual_adjPred)
-# 9/6/20 Step 4a: last entry/row 19 value (0) needs to be first entry bc that is the referent 
-annual_adjPred <- lag(annual_adjPred) # gets rid of last entry, shifting everything back one position
-annual_adjPred[1] <- 0 #set first entry (originally NA) to 0 for referent
-annual_adjPred <- data.frame("preds" = annual_adjPred) #vector to dataframe
-annual_adjPred
-
-# Step 4b: add column with adjusted means for each study year (2000-2018; n=19)
-overall_mean <- mean(native_ctyear_exp$annual_mean_all)
-annual_adjPred <- annual_adjPred %>% mutate(adj_mean = preds + overall_mean) #column that adds global mean to predicted diffs for each year
-adjPred # original centered predictions around 0 for each county-year observation
-annual_adjPred # PM predictions adjusted by overall mean summarized for each year
-
-# Step 4c: Add in year ID column
-annual_adjPred <- annual_adjPred %>% 
-  mutate(year = new_data$year) 
-
-# Step 5: add column for 3-year moving average (average of that year and the two years before it)
-annual_adjPred$movave <- (annual_adjPred$adj_mean + 
-                                  lag(annual_adjPred$adj_mean) + 
-                                  lag(annual_adjPred$adj_mean,2))/3
-# 5b: fill in first year with just that first year value
-annual_adjPred[1,"movave"] <- annual_adjPred$adj_mean[1]
-# 5c: fill second year with avg from first and second year
-annual_adjPred[2,"movave"] <- mean(c(annual_adjPred$adj_mean[1],
-                                    annual_adjPred$adj_mean[2]))
-# 5d: ID columns for plotting
-annual_adjPred$State_Name <- "Adjusted Mean (All States)"
-annual_adjPred <- annual_adjPred %>% mutate("year" = factor(2000:2018))
-annual_adjPred$year <- as.factor(substr(annual_adjPred$year, 3, 4))
-annual_adjPred
-```
-
-
-```{r}
-# Aggregate to get an average exposure for each state per year (unadjusted)
-native_state_annual_mean <- aggregate(annual_mean_all~year+State_Name,
-          data=native_ctyear_exp,
-          FUN=mean)
-native_state_annual_mean 
-#3 year moving avg
-#separate df by state FIPS and rbind back
-state_analysis <- list() #empty list for county
-native_state_exp <- unique(native_state_annual_mean$State_Name)
-native_exp_final <- data.frame() #empty df to rbind list items into
-library(stats)
-for (i in 1:length(native_state_exp)){
-  #separate df by state
-  state_analysis[[i]] <- native_state_annual_mean %>%
-    filter(State_Name == native_state_exp[i])
-  #new col of moving averages
-  state_analysis[[i]] <- state_analysis[[i]] %>%
-    group_by(year) %>%
-    arrange(year) 
-  #new column for moving averages
-  state_analysis[[i]]$movave <- (state_analysis[[i]]$annual_mean_all + 
-                                    lag(state_analysis[[i]]$annual_mean_all) + 
-                                    lag(state_analysis[[i]]$annual_mean_all,2))/3
-  #fill first year entry with just first year entry
-  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$annual_mean_all[1]
-  #fill second year with avg from first and second year
-  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$annual_mean_all[1],
-                                           state_analysis[[i]]$annual_mean_all[2]))
-  #rebind df
-  native_exp_final <- do.call(rbind, state_analysis)
-}
-
-native_exp_final 
-native_exp_final$year <- substr(native_exp_final$year, 3, 4)
-native_exp_final$year <- as.factor(native_exp_final$year)
-#fill in NAs in movave column; have first year be the first year, 2nd year be 2 year moving avg
-native_exp_final$county_type <- "American Indian"
-
-# df for average decline, to join with table
-native_avgdec <- aggregate(annual_mean_all~year,
-                           data=native_exp_final,
-                           FUN=mean)
-# code moving average column
-native_avgdec$movave <- (native_avgdec$annual_mean_all + 
-                                  lag(native_avgdec$annual_mean_all) + 
-                                  lag(native_avgdec$annual_mean_all,2))/3
-native_avgdec[1,"movave"] <- native_avgdec$annual_mean_all[1]
-#fill second year with avg from first and second year
-native_avgdec[2,"movave"] <- mean(c(native_avgdec$annual_mean_all[1],
-                                    native_avgdec$annual_mean_all[2]))
-
-# dummy columns
-native_avgdec$State_Name <- "Average Concentration across all States"
-native_avgdec$county_type <- "American Indian"
-native_avgdec <- native_avgdec %>% dplyr::select(year, State_Name, annual_mean_all, movave, county_type)
-
-native_exp_final
-
-# PLOT
-monitor_ai_timetrend <- ggplot() + 
-  geom_line(data = native_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name, colour= State_Name),
-            color = "grey") + #each line = state mean
-  geom_line(data=native_avgdec,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted line
-  geom_line(data= annual_adjPred,
-            aes(x=year, y=adj_mean,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted line
-  ylim(0,20) +
-  ylab(expression(paste("Annual Measured ", PM[2.5], " Concentrations", " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "AI Populated Counties",
-       x = "Year") + theme_linedraw()  +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) 
-monitor_ai_timetrend
-
-# customlabel inside graph
-grob_monitor_ai <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
-  gp=gpar(fontsize=30)))
-
-# Final Plot
-monitor_ai_timetrend  + annotation_custom(grob_monitor_ai)
-```
-
-####3.4.1.2 Non-AI Counties
-```{r}
-# Non-native counties (monitor)
-nonnative_ctyear_exp <- all_ctyear_exp %>% filter(county_type == 0)
-# Join with data to get state acronyms
-nonnative_ctyear_exp <- nonnative_ctyear_exp %>% 
-  dplyr::select(County, year, annual_mean_all, State)
-nonnative_ctyear_exp$year <- as.factor(nonnative_ctyear_exp$year)
-unique(nonnative_ctyear_exp$State_Name)
-nonnative_ctyear_exp <- nonnative_ctyear_exp %>% inner_join(state_fips)
-nonnative_ctyear_exp
-
-# 8/22/20 edit: making the adjusted trend line
-# Step 0: Try making unadjusted line first and makes sure it matches the average decline df below, namely:
-# aggregate(annual_mean_all~year,data=nonnative_exp_final,FUN=mean)
-# new_data <- data.frame("year" = 2000:2018)
-# new_data$year <- as.factor(new_data$year) #defined previously
-monitor_non_ai_mod1 <- lm(annual_mean_all ~ year, data = nonnative_ctyear_exp)
-summary(monitor_non_ai_mod1)
-adjPred_mod1_non_ai <- predict(monitor_non_ai_mod1, new_data)
-adjPred_mod1_non_ai #matches native_avgdec$annual_mean_all. success!
-
-# Step 1: make dataframe with AI monitor subset, covariates, and make cols for deciles of confounders
-monitor_non_ai_mod2_df <- nonnative_ctyear_exp %>% inner_join(covariates)
-
-monitor_non_ai_mod2_df$popd_q <- cut(monitor_non_ai_mod2_df$pop_density, 
-                                 quantile(all_avgmon_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
-
-monitor_non_ai_mod2_df$hhinc_q <- cut(monitor_non_ai_mod2_df$hh_income, 
-                                  quantile(all_avgmon_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
-monitor_non_ai_mod2_df
-
-# # 8/25/20: read out this dataframe to send to Marianthi
-# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/intermediate_data")
-# write_csv(monitor_non_ai_mod2_df, "monitor_non_ai_df.csv")
-
-# 9/7 updated Step 2: Run mixed regression model to get all the beta values; for now just use gamm4
-monitor_non_ai_mod2 <- gamm4(annual_mean_all ~ as.factor(year) + popd_q + hhinc_q,
-                random =~(1|State/County),
-                data = monitor_non_ai_mod2_df)
-summary(monitor_non_ai_mod2$gam)
-
-# Step 3: Run a predict to get adjusted prediction values based on these betas
-adjPred_non_ai <- predict(monitor_non_ai_mod2$gam, 
-                          newdata = monitor_non_ai_mod2_df, type = "terms")[,1]
-adjPred_non_ai <- as.data.frame(adjPred_non_ai) #save matrix as dataframe
-adjPred_non_ai 
-
-# Step 4: adding globally averaged PM2.5 concentration back to adjPred values for each year
-# EDIT: Need to reorder annual_adjPred_non_ai, years are off; note that county FIPS 01049 has complete monitor data for all study years
-# nonnative_ctyear_exp[c(55:73),]
-names(adjPred_non_ai)[1] <- "preds" #rename first column from year to preds
-adjPred_non_ai
-annual_adjPred_non_ai <- adjPred_non_ai %>% slice(55:73) #rows from FIPS 01049 entries; vector of 19 predicted values for each study year. equivalent to using unique()
-
-annual_adjPred_non_ai
-overall_mean_non_ai <- mean(nonnative_ctyear_exp$annual_mean_all)
-annual_adjPred_non_ai <- annual_adjPred_non_ai %>% mutate(adj_mean = preds + overall_mean_non_ai) #column that adds global mean to predicted diffs
-
-annual_adjPred_non_ai
-
-# Step 5: ID columns for plotting
-annual_adjPred_non_ai$State_Name <- "Adjusted Mean (All States)"
-annual_adjPred_non_ai <- annual_adjPred_non_ai %>% mutate("year" = factor(2000:2018))
-annual_adjPred_non_ai$year <- as.factor(substr(annual_adjPred_non_ai$year, 3, 4))
-annual_adjPred_non_ai
-
-```
-
-```{r}
-# Aggregate to get an average exposure for each state per year
-nonnative_state_annual_mean <- aggregate(annual_mean_all~year+State_Name,
-          data=nonnative_ctyear_exp,
-          FUN=mean)
-nonnative_state_annual_mean
-
-#3 year moving avg
-#separate df by state FIPS and rbind back
-state_analysis <- list() #empty list for county
-nonnative_state_exp <- unique(nonnative_state_annual_mean$State_Name)
-nonnative_exp_final <- data.frame() #empty df to rbind list items into
-library(stats)
-for (i in 1:length(nonnative_state_exp)){
-  #separate df by state
-  state_analysis[[i]] <- nonnative_state_annual_mean %>%
-    filter(State_Name == nonnative_state_exp[i])
-  #new col of moving averages
-  state_analysis[[i]] <- state_analysis[[i]] %>%
-    group_by(year) %>%
-    arrange(year) 
-  #new column for moving averages
-  state_analysis[[i]]$movave <- (state_analysis[[i]]$annual_mean_all + 
-                                    lag(state_analysis[[i]]$annual_mean_all) + 
-                                    lag(state_analysis[[i]]$annual_mean_all,2))/3
-  #fill first year entry with just first year entry
-  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$annual_mean_all[1]
-  #fill second year with avg from first and second year
-  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$annual_mean_all[1],
-                                           state_analysis[[i]]$annual_mean_all[2]))
-  #rebind df
-  nonnative_exp_final <- do.call(rbind, state_analysis)
-}
-
-nonnative_exp_final 
-nonnative_exp_final$year <- substr(nonnative_exp_final$year, 3, 4)
-nonnative_exp_final$year <- as.factor(nonnative_exp_final$year)
-#fill in NAs in movave column; have first year be the first year, 2nd year be 2 year moving avg
-nonnative_exp_final$county_type <- "Non-American Indian"
-nonnative_exp_final
-# df for average decline, to join with table
-nonnative_avgdec <- aggregate(annual_mean_all~year,
-          data=nonnative_exp_final,
-          FUN=mean)
-nonnative_avgdec$movave <- (nonnative_avgdec$annual_mean_all + 
-                                  lag(nonnative_avgdec$annual_mean_all) + 
-                                  lag(nonnative_avgdec$annual_mean_all,2))/3
-nonnative_avgdec[1,"movave"] <- nonnative_avgdec$annual_mean_all[1]
-#fill second year with avg from first and second year
-nonnative_avgdec[2,"movave"] <- mean(c(nonnative_avgdec$annual_mean_all[1],
-                                    nonnative_avgdec$annual_mean_all[2]))
-
-# dummy columns
-nonnative_avgdec$State_Name <- "Average Concentration across all States"
-nonnative_avgdec$county_type <- "Non-American Indian"
-nonnative_avgdec <- nonnative_avgdec %>% dplyr::select(year, State_Name, annual_mean_all, movave, county_type)
-nonnative_avgdec
-
-monitor_nai_timetrend <- ggplot() + 
-  geom_line(data = nonnative_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name),
-            color = "grey") +
-  geom_line(data=nonnative_avgdec,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted line
-  geom_line(data= annual_adjPred_non_ai,
-            aes(x=year, y=adj_mean,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted line
-  ylim(0, 20) +
-  ylab(expression(paste("Annual Measured ", PM[2.5], " Concentrations", " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "Non-AI Populated Counties",
-       x = "Year") + theme_linedraw() +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) + theme(legend.position="None")
-monitor_nai_timetrend 
-
-# 9/7 for paper
-# customlabel inside graph
-grob_nai_monitor <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,gp=gpar(fontsize=30)))
-# Plot
-monitor_nai_timetrend + annotation_custom(grob_nai_monitor)
-```
-
 ###3.4.2 Model Data
-####3.4.2.1 AI Counties
-```{r}
+```{r Create Dataframe of annual mean PM2.5 adjusted in all counties}
 # Full model pm2.5 dataset
 model_PM25
 # Separate out data of just native counties:
@@ -636,164 +311,6 @@ native_modelpm <- native_modelpm %>%
 native_modelpm <- native_modelpm %>% inner_join(state_fips)
 native_modelpm
 
-# Step 1: make dataframe with AI monitor subset, covariates, and make cols for deciles of confounders
-model_ai_mod2_df <- native_modelpm %>% inner_join(covariates)
-
-model_ai_mod2_df$popd_q <- cut(model_ai_mod2_df$pop_density, 
-                                 quantile(model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
-
-model_ai_mod2_df$hhinc_q <- cut(model_ai_mod2_df$hh_income, 
-                                  quantile(model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
-model_ai_mod2_df
-
-
-# Step 2: Run mixed regression model to get all the beta values; for now just use gamm4
-model_ai_mod2 <- gamm4(PM25 ~ as.factor(Year) + popd_q + hhinc_q,
-                random =~(1|State/County),
-                data = model_ai_mod2_df)
-summary(model_ai_mod2$gam)
-
-
-# Step 3: Run a predict to get adjusted prediction values based on these betas
-adjPred_mod_ai <- predict(model_ai_mod2$gam, newdata = model_ai_mod2_df, type = "terms")[,1]
-adjPred_mod_ai <- as.data.frame(adjPred_mod_ai) #save matrix as dataframe
-adjPred_mod_ai 
-
-# Note: different from monitor data in that model data is grouped by year (all counties 2000, all counties 2001, so on) rather than by county (county 01079 all available years, next county all available years, so on), so predictions are structured differently (same value repeats for all counties for that year, then the next, until 2018)
-
-```
-
-```{r}
-# Step 4: adding globally averaged PM2.5 concentration back to adjPred values for each year
-names(adjPred_mod_ai)[1] <- "preds" # rename first column from year to preds
-annual_adjPred_mod_ai <- as.data.frame(unique(adjPred_mod_ai$preds)) # vector of 19 values for each year, coerce into df
-
-nrow(annual_adjPred_mod_ai) # should be 19
-names(annual_adjPred_mod_ai)[1] <- "preds" # rename first column from super long name to preds
-
-# Step 4b: add column with adjusted means for each study year (2000-2018; n=19)
-overall_mean_mod_ai <- mean(native_modelpm$PM25) # mean PM25 concentration for AI counties
-
-annual_adjPred_mod_ai <- annual_adjPred_mod_ai %>% mutate(adj_mean = preds + overall_mean_mod_ai) #column that adds global mean to predicted diffs for each year
-annual_adjPred_mod_ai # original centered predictions around 0 for each county-year observation
-annual_adjPred_mod_ai # PM predictions adjusted by overall mean summarized for each year
-
-# Step 4c: Add in year ID column
-annual_adjPred_mod_ai <- annual_adjPred_mod_ai %>% 
-  mutate(year = new_data$year) 
-annual_adjPred_mod_ai 
-
-# Step 5: add column for 3-year moving average (average of that year and the two years before it)
-annual_adjPred_mod_ai$movave <- (annual_adjPred_mod_ai$adj_mean + 
-                                  lag(annual_adjPred_mod_ai$adj_mean) + 
-                                  lag(annual_adjPred_mod_ai$adj_mean,2))/3
-# 5b: fill in first year with just that first year value
-annual_adjPred_mod_ai[1,"movave"] <- annual_adjPred_mod_ai$adj_mean[1]
-# 5c: fill second year with avg from first and second year
-annual_adjPred_mod_ai[2,"movave"] <- mean(c(annual_adjPred_mod_ai$adj_mean[1],
-                                    annual_adjPred_mod_ai$adj_mean[2]))
-# 5d: ID columns for plotting
-annual_adjPred_mod_ai$State_Name <- "Adjusted Mean (All States)"
-annual_adjPred_mod_ai <- annual_adjPred_mod_ai %>% mutate("year" = factor(2000:2018))
-annual_adjPred_mod_ai$year <- as.factor(substr(annual_adjPred_mod_ai$year, 3, 4))
-annual_adjPred_mod_ai
-```
-
-```{r}
-# Aggregate to get an average exposure for each state per Year
-native_modelpm <- aggregate(PM25~Year+State_Name,
-          data=native_modelpm,
-          FUN=mean)
-native_modelpm 
-#3 Year moving avg
-#separate df by state FIPS and rbind back
-state_analysis <- list() #empty list for county
-native_state_exp <- unique(native_modelpm$State_Name)
-native_exp_final <- data.frame() #empty df to rbind list items into
-library(stats)
-for (i in 1:length(native_state_exp)){
-  #separate df by state
-  state_analysis[[i]] <- native_modelpm %>%
-    filter(State_Name == native_state_exp[i])
-  #new col of moving averages
-  state_analysis[[i]] <- state_analysis[[i]] %>%
-    group_by(Year) %>%
-    arrange(Year) 
-  #new column for moving averages
-  state_analysis[[i]]$movave <- (state_analysis[[i]]$PM25 + 
-                                    lag(state_analysis[[i]]$PM25) + 
-                                    lag(state_analysis[[i]]$PM25,2))/3
-  #fill first Year entry with just first Year entry
-  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$PM25[1]
-  #fill second Year with avg from first and second Year
-  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$PM25[1],
-                                           state_analysis[[i]]$PM25[2]))
-  #rebind df
-  native_modelpm_final <- do.call(rbind, state_analysis)
-}
-
-native_modelpm_final
-native_modelpm_final$Year <- substr(native_modelpm_final$Year, 3, 4)
-native_modelpm_final$Year <- as.factor(native_modelpm_final$Year)
-#fill in NAs in movave column; have first Year be the first Year, 2nd Year be 2 Year moving avg
-native_modelpm_final$county_type <- "American Indian"
-
-# df for average decline, to join with table
-native_avgdec_model <- aggregate(PM25~Year,
-          data=native_modelpm_final,
-          FUN=mean)
-native_avgdec_model$movave <- (native_avgdec_model$PM25 + 
-                                  lag(native_avgdec_model$PM25) + 
-                                  lag(native_avgdec_model$PM25,2))/3
-native_avgdec_model[1,"movave"] <- native_avgdec_model$PM25[1]
-#fill second Year with avg from first and second Year
-native_avgdec_model[2,"movave"] <- mean(c(native_avgdec_model$PM25[1],
-                                    native_avgdec_model$PM25[2]))
-
-# dummy columns
-native_avgdec_model$State_Name <- "Average Concentration across all States"
-native_avgdec_model$county_type <- "American Indian"
-native_avgdec_model <- native_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
-# make list with both df
-dplyr::bind_rows(native_modelpm_final,native_avgdec_model)
-
-# PLOT
-
-model_ai_timetrend <- ggplot() + 
-  geom_line(data = native_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name, colour= State_Name),
-            color = "grey") + #each line = state mean
-  geom_line(data=native_avgdec_model,
-            aes(x=Year, y=PM25,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted line
-  geom_line(data= annual_adjPred_mod_ai,
-            aes(x=year, y=adj_mean,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted line
-  ylim(0,20) +
-  ylab(expression(paste("Annual Modeled ", PM[2.5], " Concentrations", " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "AI Populated Counties",
-       x = "Year") + theme_linedraw()  +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) 
-model_ai_timetrend 
-
-# customlabel inside graph
-grob_model_ai <- grobTree(textGrob("C", x=0.05,  y=0.9, hjust=0,
-  gp=gpar(fontsize=30)))
-
-# Final Plot
-model_ai_timetrend + annotation_custom(grob_model_ai)
-```
-
-
-####3.4.2.2 Non-AI Counties
-```{r}
 # Separate out data of non-native counties:
 nonnative_modelpm <- model_PM25 %>% filter(county_type == 0)
 # model_PM25 <- model_PM25 %>% dplyr::rename(Year = year)
@@ -803,173 +320,78 @@ nonnative_modelpm <- nonnative_modelpm %>%
 nonnative_modelpm <- nonnative_modelpm %>% inner_join(state_fips)
 nonnative_modelpm
 
-# Step 1: make dataframe with AI monitor subset, covariates, and make cols for deciles of confounders
-model_nai_mod2_df <- nonnative_modelpm %>% inner_join(covariates)
+## Duplicate df with all annual model averages data to use
+dta.all.modelPM <- model_PM25
 
-model_nai_mod2_df$popd_q <- cut(model_nai_mod2_df$pop_density, 
-                                 quantile(model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+## Add columns for popd and hhinc deciles
+dta.all.modelPM$popd_q <- cut(dta.all.modelPM$pop_density, 
+                                 quantile(dta.all.modelPM$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
 
-model_nai_mod2_df$hhinc_q <- cut(model_nai_mod2_df$hh_income, 
-                                  quantile(model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
-model_nai_mod2_df
+dta.all.modelPM$hhinc_q <- cut(dta.all.modelPM$hh_income, 
+                                  quantile(dta.all.modelPM$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+dta.all.modelPM
 
+## Fit linear mixed effect regression model to the data
+mod.all.modelPM <- gamm4(PM25 ~ county_type*as.factor(year) + popd_q + hhinc_q,
+                 random =~(1|State/County),
+                 data = dta.all.modelPM)
 
-# Step 2: Run mixed regression model to get all the beta values; for now just use gamm4
-model_nai_mod2 <- gamm4(PM25 ~ as.factor(Year) + popd_q + hhinc_q,
-                random =~(1|State/County),
-                data = model_nai_mod2_df)
-summary(model_nai_mod2$gam)
+## Get predicted coefficients of total effect of AI county over time (county_type main effect plus county_type*year effect)
+## essentially just the difference from baseline intercept (the mean PM2.5 for non-AI counties in 2000)
+dta.all.modelPM$preds.r <- predict(mod.all.modelPM$gam, dta.all.modelPM, type = "terms")[,2] + 
+                   predict(mod.all.modelPM$gam, dta.all.modelPM, type = "terms")[,5] 
 
+## summarize annual average effect for each county type (e.g. aggregate by county and year)
+agg.all.modelPM <- aggregate(preds.r ~ year + county_type, FUN = mean, data = dta.all.modelPM)
 
-# Step 3: Run a predict to get adjusted prediction values based on these betas
-adjPred_mod_nai <- predict(model_nai_mod2$gam, newdata = model_nai_mod2_df, type = "terms")[,1]
-adjPred_mod_nai <- as.data.frame(adjPred_mod_nai) #save matrix as dataframe
-adjPred_mod_nai 
+## the following code borrowed from Marianthi to get adjusted annual mean concentrations
+summary(mod.all.modelPM$gam)
 
-# Note: different from monitor data in that model data is grouped by year (all counties 2000, all counties 2001, so on) rather than by county (county 01079 all available years, next county all available years, so on), so predictions are structured differently (same value repeats for all counties for that year, then the next, until 2018)
+popd.coeff.modelPM <- data.frame(summary(mod.all.modelPM$gam)$p.coeff[21:29]) # model beta coefficients for population density deciles
+
+hinc.coeff.modelPM <- data.frame(summary(mod.all.modelPM$gam)$p.coeff[30:38]) # model beta coefficients for HH income deciles
+
+# frequency table for population density in AI and non-AI counties, with an additional column for the beta coefficients based on the model outputs.
+popd.tt.modelPM <- data.frame(table(dta.all.modelPM$county_type, dta.all.modelPM$popd_q))
+names(popd.tt.modelPM) <- c("county_type", "popd.cat", "freq")
+
+popd.coeff.modelPM$popd.cat <- substr(rownames(popd.coeff.modelPM), 7, nchar(rownames(popd.coeff.modelPM)))
+names(popd.coeff.modelPM)[1] <- "popd.coeff"
+
+popd.tt.modelPM <- merge(popd.tt.modelPM, popd.coeff.modelPM, by="popd.cat")
+popd.tt.modelPM
+
+# frequency table for hh income in AI and non-AI counties, with an additional column for the beta coefficients based on the model outputs.
+hinc.tt <- data.frame(table(dta.all$county_type, dta.all$hhinc_q))
+names(hinc.tt) <- c("county_type", "hinc.cat", "freq")
+
+hinc.coeff$hinc.cat <- substr(rownames(hinc.coeff), 8, nchar(rownames(hinc.coeff)))
+names(hinc.coeff)[1] <- "hinc.coeff"
+
+hinc.tt <- merge(hinc.tt, hinc.coeff, by="hinc.cat")
+hinc.tt 
+
+# weighted average coefficient for AI and nonAI pop density
+# calculated by number of counties in first decile category multiplied by first decile beta + ... number of counties in 
+# last decile category multiplied by last decile beta all over total number of counties
+ai.popd  <- sum(popd.tt$popd.coeff[which(popd.tt$county_type == 1)]*popd.tt$freq[which(popd.tt$county_type == 1)])/sum(popd.tt$freq[which(popd.tt$county_type == 1)])
+
+nai.popd <- sum(popd.tt$popd.coeff[which(popd.tt$county_type == 0)]*popd.tt$freq[which(popd.tt$county_type == 0)])/sum(popd.tt$freq[which(popd.tt$county_type == 0)])
+
+# weighted average coefficient for AI and nonAI HH income
+ai.hinc  <- sum(hinc.tt$hinc.coeff[which(hinc.tt$county_type == 1)]*hinc.tt$freq[which(hinc.tt$county_type == 1)])/sum(hinc.tt$freq[which(hinc.tt$county_type == 1)])
+
+nai.hinc <- sum(hinc.tt$hinc.coeff[which(hinc.tt$county_type == 0)]*hinc.tt$freq[which(hinc.tt$county_type == 0)])/sum(hinc.tt$freq[which(hinc.tt$county_type == 0)])
+
+# adjusted intercepts that have the model intercept plus the weighted average coefficient for AI and nonAI pop density and hhincome
+# need to "explain away" these effects
+pm.ai.int  <- summary(mod.all$gam)$p.coeff[1] + ai.popd + ai.hinc 
+pm.nai.int <- summary(mod.all$gam)$p.coeff[1] + nai.popd + nai.hinc 
+
+agg.all$preds_adj <- ifelse(agg.all$county_type == 1, (agg.all$preds.r + pm.ai.int),
+                         (agg.all$preds.r + pm.nai.int))
+
+agg.all  
 
 ```
 
-```{r}
-# Step 4: adding globally averaged PM2.5 concentration back to adjPred values for each year
-names(adjPred_mod_nai)[1] <- "preds" # rename first column from year to preds
-annual_adjPred_mod_nai <- as.data.frame(unique(adjPred_mod_nai$preds)) # vector of 19 values for each year, coerce into df
-
-nrow(annual_adjPred_mod_nai) # should be 19
-names(annual_adjPred_mod_nai)[1] <- "preds" # rename first column from super long name to preds
-annual_adjPred_mod_nai
-
-# Step 4b: add column with adjusted means for each study year (2000-2018; n=19)
-overall_mean_mod_nai <- mean(nonnative_modelpm$PM25) # mean PM25 concentration for AI counties
-
-annual_adjPred_mod_nai <- annual_adjPred_mod_nai %>% mutate(adj_mean = preds + overall_mean_mod_nai) #column that adds global mean to predicted diffs for each year
-annual_adjPred_mod_nai # preds = original centered predictions around 0 for each county-year observation; adj_mean = PM predictions adjusted by overall mean summarized for each year
-
-# Step 4c: Add in year ID column
-annual_adjPred_mod_nai <- annual_adjPred_mod_nai %>% 
-  mutate(year = new_data$year) 
-annual_adjPred_mod_nai 
-
-# Step 5: add column for 3-year moving average (average of that year and the two years before it)
-annual_adjPred_mod_nai$movave <- (annual_adjPred_mod_nai$adj_mean + 
-                                  lag(annual_adjPred_mod_nai$adj_mean) + 
-                                  lag(annual_adjPred_mod_nai$adj_mean,2))/3
-# 5b: fill in first year with just that first year value
-annual_adjPred_mod_nai[1,"movave"] <- annual_adjPred_mod_nai$adj_mean[1]
-# 5c: fill second year with avg from first and second year
-annual_adjPred_mod_nai[2,"movave"] <- mean(c(annual_adjPred_mod_nai$adj_mean[1],
-                                    annual_adjPred_mod_nai$adj_mean[2]))
-# 5d: ID columns for plotting
-annual_adjPred_mod_nai$State_Name <- "Adjusted Mean (All States)"
-annual_adjPred_mod_nai <- annual_adjPred_mod_nai %>% mutate("year" = factor(2000:2018))
-annual_adjPred_mod_nai$year <- as.factor(substr(annual_adjPred_mod_nai$year, 3, 4))
-annual_adjPred_mod_nai
-
-```
-
-```{r}
-# Aggregate to get an average exposure for each state per Year
-nonnative_modelpm <- aggregate(PM25~Year+State_Name,
-          data=nonnative_modelpm,
-          FUN=mean)
-nonnative_modelpm 
-#3 Year moving avg
-#separate df by state FIPS and rbind back
-state_analysis <- list() #empty list for county
-nonnative_state_exp <- unique(nonnative_modelpm$State_Name)
-nonnative_exp_final <- data.frame() #empty df to rbind list items into
-library(stats)
-for (i in 1:length(nonnative_state_exp)){
-  #separate df by state
-  state_analysis[[i]] <- nonnative_modelpm %>%
-    filter(State_Name == nonnative_state_exp[i])
-  #new col of moving averages
-  state_analysis[[i]] <- state_analysis[[i]] %>%
-    group_by(Year) %>%
-    arrange(Year) 
-  #new column for moving averages
-  state_analysis[[i]]$movave <- (state_analysis[[i]]$PM25 + 
-                                    lag(state_analysis[[i]]$PM25) + 
-                                    lag(state_analysis[[i]]$PM25,2))/3
-  #fill first Year entry with just first Year entry
-  state_analysis[[i]][1,"movave"] <- state_analysis[[i]]$PM25[1]
-  #fill second Year with avg from first and second Year
-  state_analysis[[i]][2,"movave"] <- mean(c(state_analysis[[i]]$PM25[1],
-                                           state_analysis[[i]]$PM25[2]))
-  #rebind df
-  nonnative_modelpm_final <- do.call(rbind, state_analysis)
-}
-
-nonnative_modelpm_final
-nonnative_modelpm_final$Year <- substr(nonnative_modelpm_final$Year, 3, 4)
-nonnative_modelpm_final$Year <- as.factor(nonnative_modelpm_final$Year)
-#fill in NAs in movave column; have first Year be the first Year, 2nd Year be 2 Year moving avg
-nonnative_modelpm_final$county_type <- "Non-AI"
-
-# df for average decline, to join with table
-nonnative_avgdec_model <- aggregate(PM25~Year,
-          data=nonnative_modelpm_final,
-          FUN=mean)
-nonnative_avgdec_model$movave <- (nonnative_avgdec_model$PM25 + 
-                                  lag(nonnative_avgdec_model$PM25) + 
-                                  lag(nonnative_avgdec_model$PM25,2))/3
-nonnative_avgdec_model[1,"movave"] <- nonnative_avgdec_model$PM25[1]
-#fill second Year with avg from first and second Year
-nonnative_avgdec_model[2,"movave"] <- mean(c(nonnative_avgdec_model$PM25[1],
-                                    nonnative_avgdec_model$PM25[2]))
-
-# dummy columns
-nonnative_avgdec_model$State_Name <- "Average Concentration across all States"
-nonnative_avgdec_model$county_type <- "Non-AI"
-nonnative_avgdec_model <- nonnative_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
-
-# OLD MOVAVG PLOT
-# nonnative_model_movavg <- ggplot() + 
-#   geom_line(data = nonnative_modelpm_final,
-#             aes(x=Year, y = movave,
-#                 group = State_Name, colour= State_Name)) +
-#   geom_line(data=nonnative_avgdec_model,
-#             aes(x=Year, y=movave,
-#                 group=State_Name),
-#             color="black",
-#             size = 1.25) +
-#   ylim(0,20) +
-#   ylab(expression(paste("Annual ", PM[2.5], " Model Concentrations", " (", mu, "g/", m^3, ")"))) +
-#   labs(title = "Non-AI Populated Counties",
-#        x = "Year") + theme_linedraw()
-# nonnative_model_movavg 
-# boop_model <- nonnative_model_movavg + theme(legend.position="None") #get rid of legend to plot both graphs in the same screen
-# native_model_movavg
-
-# PLOT
-model_nai_timetrend <- ggplot() + 
-  geom_line(data = nonnative_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name, colour= State_Name),
-            color = "grey") + #each line = state mean
-  geom_line(data=nonnative_avgdec_model,
-            aes(x=Year, y=PM25,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted line
-  geom_line(data= annual_adjPred_mod_nai,
-            aes(x=year, y=adj_mean,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted line
-  ylim(0,20) +
-  ylab(expression(paste("Annual Modeled ", PM[2.5], " Concentrations", " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "AI Populated Counties",
-       x = "Year") + theme_linedraw()  +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) 
-model_nai_timetrend 
-
-# customlabel inside graph
-grob_model_nai <- grobTree(textGrob("D", x=0.05,  y=0.9, hjust=0,
-  gp=gpar(fontsize=30)))
-
-# Final Plot
-model_nai_timetrend + annotation_custom(grob_model_nai)
-```
