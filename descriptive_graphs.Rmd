@@ -43,15 +43,37 @@ nonnative_ctyear_exp
 ## Duplicate df with all annual averages data to use
 dta.all <- all_ctyear_exp
 
-## Fit linear mixed effect regression model to the data
+## Set referent group 
+dta.all$county_type <- relevel(dta.all$county_type, ref = "0")
+
+## Fit linear mixed effect regression model to the data (ref = 0)
 mod.all <- gamm4(annual_mean_all ~ county_type*as.factor(year) + popd_q + hhinc_q,
                  random =~(1|State/County),
                  data = dta.all)
+summary(mod.all$gam)
+
+## Same thing with alternative model referent is county_type = 1 
+## Duplicate df with all annual averages data to use
+dta.all.ref1 <- all_ctyear_exp
+mod.all.ref1 <- gamm4(annual_mean_all ~ county_type*as.factor(year) + popd_q + hhinc_q,
+                 random =~(1|State/County),
+                 data = dta.all.ref1)
+summary(mod.all.ref1$gam)
 
 ## Get predicted coefficients of total effect of AI county over time (county_type main effect plus county_type*year effect)
 ## essentially just the difference from baseline intercept (the mean PM2.5 for non-AI counties in 2000)
-dta.all$preds.r <- predict(mod.all$gam, dta.all, type = "terms")[,2] + 
-                   predict(mod.all$gam, dta.all, type = "terms")[,5] 
+dta.all$preds.r <- predict(mod.all$gam, dta.all, type = "terms")[,2] + # year main effect
+                   predict(mod.all$gam, dta.all, type = "terms")[,5] # year*county_type interx
+summary(predict(mod.all$gam, dta.all, type = "terms"))
+
+# dta.no.ref <- all_ctyear_exp
+# 
+# mod.all.no.ref <- gamm4(annual_mean_all ~ county_type*as.factor(year) + popd_q + hhinc_q,
+#                  random =~(1|State/County),
+#                  data = dta.all)
+# 
+# summary(predict(mod.all.no.ref$gam, dta.no.ref, type = "terms"))
+# summary(predict(mod.all$gam, dta.all, type = "terms"))
 
 ## summarize annual average effect for each county type (e.g. aggregate by county and year)
 agg.all <- aggregate(preds.r ~ year + county_type, FUN = mean, data = dta.all)
@@ -96,7 +118,7 @@ nai.hinc <- sum(hinc.tt$hinc.coeff[which(hinc.tt$county_type == 0)]*hinc.tt$freq
 
 # adjusted intercepts that have the model intercept plus the weighted average coefficient for AI and nonAI pop density and hhincome
 # need to "explain away" these effects
-pm.ai.int  <- summary(mod.all$gam)$p.coeff[1] + ai.popd + ai.hinc 
+pm.ai.int  <- summary(mod.all.ref1$gam)$p.coeff[1] + ai.popd + ai.hinc 
 pm.nai.int <- summary(mod.all$gam)$p.coeff[1] + nai.popd + nai.hinc 
 
 agg.all$preds_adj <- ifelse(agg.all$county_type == 1, (agg.all$preds.r + pm.ai.int),
@@ -203,7 +225,7 @@ grob_monitor_ai <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
 
 # Final Plot & save it
 monitor_ai_timetrend  + annotation_custom(grob_monitor_ai)
-# ggsave("./figures/updated_9.27/monitor_ai_states.png")
+ggsave("./figures/updated_9.27/monitor_ai_states_3.png")
 ```
 
 ```{r Get unadjusted mean PM2.5 for non-AI counties & Plot all adj and unadj values}
@@ -302,7 +324,7 @@ grob_nai_monitor <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,gp=gpar(fonts
 
 # Plot & save
 monitor_nai_timetrend + annotation_custom(grob_nai_monitor)
-# ggsave("./figures/updated_9.27/monitor_nai_states.png")
+ggsave("./figures/updated_9.27/monitor_nai_states_3.png")
 
 ```
 
@@ -328,7 +350,11 @@ nonnative_modelpm <- nonnative_modelpm %>% inner_join(state_fips)
 nonnative_modelpm
 
 ## Duplicate df with all annual model averages data to use
-dta.all.modelPM <- model_PM25
+dta.all.modelPM <- model_PM25 
+## Set referent group 
+dta.all.modelPM$county_type <- as.factor(dta.all.modelPM$county_type)
+dta.all.modelPM$county_type <- relevel(dta.all.modelPM$county_type, ref = "0")
+levels(dta.all.modelPM$county_type)
 
 ## Add columns for popd and hhinc deciles
 dta.all.modelPM$popd_q <- cut(dta.all.modelPM$pop_density, 
@@ -337,6 +363,8 @@ dta.all.modelPM$popd_q <- cut(dta.all.modelPM$pop_density,
 dta.all.modelPM$hhinc_q <- cut(dta.all.modelPM$hh_income, 
                                   quantile(dta.all.modelPM$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
 dta.all.modelPM
+
+
 
 ## Fit linear mixed effect regression model to the data
 mod.all.modelPM <- gamm4(PM25 ~ county_type*as.factor(Year) + popd_q + hhinc_q,
