@@ -1,0 +1,443 @@
+---
+title: "Part 5: Statistical Analysis"
+author: "Maggie Li (ml4424)"
+date: "10/16/2020"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(lme4)
+library(stargazer)
+library(gridExtra)
+library(grid)
+library(ggplot2)
+```
+
+## Linear Mixed Effects Model for Outcome = Monitor and Model PM2.5 concentrations
+
+### Define lmer function
+I am defining functions to run the following linear mixed regressions on the data, testing main effects only:
+-Model 1: Crude (AI/Non-AI and Year only)
+-Model 2: Partial (further adjusted for population density)
+-Model 3: Full (further adjusted for both pop density and HH income)
+
+I also run Model 3 to test for an interaction effect between AI/Non-AI classification and year.
+-Model 3X: Full model with interaction term for county_type*year
+
+```{r}
+#Define referent category for binary "exposure" variable county_type
+# Main Analysis:
+all_ctyear_exp$county_type <- relevel(all_ctyear_exp$county_type,
+                                         ref = "0")
+
+# Check linearity of year, hh_inc, pop_density thru penalized spline
+# Model with spline
+library(mgcv)
+# all models without pop density have small standard errors
+gamm.eg <- gamm(annual_mean_all ~ county_type +
+                  s(I(scale(hh_income))) + s(I(as.numeric(popd_q))) +
+                  s(I(as.numeric(as.character(year))-2000)),
+                random = list(State = ~1),
+                      data = all_ctyear_exp)
+
+summary(gamm.eg$gam)
+plot(gamm.eg$gam, pages=1) #population density and HH income are non-linear, so we adjust for them using deciles
+
+# Define functions for lmer
+# Crude model only adjusting for county_type and year
+detrend_lmer_crude <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    (1|State/County),
+                  data = data)
+  return(exp_lme)}
+
+# Partial model, adjusted for popd
+detrend_lmer_partial <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    popd_q +
+                    (1|State/County),
+                  data = data)
+  return(exp_lme)}
+# Full model with year as categorical variable
+detrend_lmer_full <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/County),
+                  data = data, REML=FALSE)
+  return(exp_lme)}
+
+# Full model with year as categorical variable, interx between year and native 
+detrend_lmer_full_catyr_intx <- function(data){
+  exp_lme <- lmer(annual_mean_all ~ county_type + year +
+                    popd_q + 
+                    hhinc_q +
+                    county_type*year +
+                    (1|State/County),
+                  data = data, REML=FALSE)
+  return(exp_lme)}
+```
+
+### Monitor Data: Run regressions for main analysis (all counties) and sensitivity analysis (rural counties)
+
+#### Main Analysis
+```{r}
+# Crude
+summary(detrend_lmer_crude(all_ctyear_exp))
+# Partial
+summary(detrend_lmer_partial(all_ctyear_exp))
+# Full
+summary
+# Full w/ InterX
+summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))
+
+# Model Output Table with three columns for crude, , full
+stargazer(detrend_lmer_crude(all_ctyear_exp),
+          detrend_lmer_partial(all_ctyear_exp),
+          detrend_lmer_full(all_ctyear_exp),
+          ci=T)
+
+# 8/25/20: read out all_ctyear_exp to send to Marianthi
+setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/intermediate_data")
+write_csv(all_ctyear_exp, "monitor_PM25_all.csv")
+```
+
+#### Rural Counties; Sensitivity Analysis
+
+
+```{r}
+# subset rural counties
+rural_monitors <- all_ctyear_exp %>% filter(as.numeric(as.factor(land_use)) >=4)
+
+#Run on Monitor Data for rural counties
+summary(detrend_lmer_full(rural_monitors))
+summary(detrend_lmer_partial(rural_monitors))
+summary(detrend_lmer_crude(rural_monitors))
+
+#output latex table
+stargazer(detrend_lmer_crude(rural_monitors),ci=T)
+```
+
+#### Plot time-varying effect of AI/Non-AI county type binary variable (county_type interaction effect with year)
+
+
+Creating Variance-Covariance Matrices, Plotting model PM2.5 declines over time
+
+I first create a variance-covariance matrix to pull out all of the variances for all of the study years after 2000:
+var(x+y) = var(x) + var(y) + 2*covar(x,y) where x = main effect of native county type on PM2.5 concnetrations in 2000 (referent), y = main effect of native county type due to interaction with time in study years 2001-2018
+
+Then I create a new data frame, pm_decline_monitor_all, which saves all of the total effect estimates (main effect + interaction effect) and their 95% confidence intervals. I use a loop to iterate through all the study years to fill in this table. Then I can graph this!
+
+##### All Main Analysis Counties
+
+```{r}
+# create vcov matrix of main effects and interX
+
+# 8/17/20 edit: first define variable for model function to avoid rerunning it a million times
+main_interx_monitor <- detrend_lmer_full_catyr_intx(all_ctyear_exp)
+
+native_yr_vcov <- vcov(main_interx_monitor)[c(2,seq(39,56)), c(2,seq(39,56))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+var_vector
+sd_vector <- sqrt(var_vector)
+length(sd_vector)
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_monitor_all <- data.frame()
+pm_decline_monitor_all[1,1] <- summary(main_interx_monitor)$coefficients[2,1]
+pm_decline_monitor_all[1,2] <- summary(main_interx_monitor)$coefficients[2,1] - sd_vector[1]
+pm_decline_monitor_all[1,3] <- summary(main_interx_monitor)$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_monitor_all[i,1] <- summary(main_interx_monitor)$coefficients[2,1]+
+    summary(main_interx_monitor)$coefficients[yr_ct,1]
+  
+  pm_decline_monitor_all[i,2] <- summary(main_interx_monitor)$coefficients[2,1]+
+    summary(main_interx_monitor)$coefficients[yr_ct,1] - sd_vector[i]
+  
+  pm_decline_monitor_all[i,3] <- summary(main_interx_monitor)$coefficients[2,1]+
+    summary(main_interx_monitor)$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+
+pm_decline_monitor_all
+
+colnames(pm_decline_monitor_all) <- c('estimate', 'cl_lower', 'cl_upper') # set col names
+
+pm_decline_monitor_all$year <- seq(2000, 2018) # column for year
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME; updated 8/28
+monitor_interx_plot <- ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_monitor_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_monitor_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+  geom_line(data=pm_decline_monitor_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  labs(x = "Year",
+       y = expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")")),
+       fill = "County Type") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) +
+  geom_hline(yintercept=0, linetype="solid", color = "red")
+monitor_interx_plot
+
+# 8/28 for paper
+grob_monitor <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+# Plot
+monitor_interx_plot + annotation_custom(grob_monitor)
+```
+
+##### Rural Main Analysis Counties (Sensitivity Analysis)
+
+```{r}
+# 8/17/20 edit: first define variable for model function to avoid rerunning it a million times
+rural_interx_monitor <- detrend_lmer_full_catyr_intx(rural_monitors)
+
+# vcov matrix for all year combinations with native county type (one less p bc one less pop density top quantile category variable)
+native_yr_vcov <- vcov(rural_interx_monitor)[c(2,seq(38,55)), c(2,seq(38,55))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+var_vector
+sd_vector <- sqrt(var_vector)
+length(sd_vector)
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+
+pm_decline_monitor_rural <- data.frame()
+pm_decline_monitor_rural[1,1] <- summary(rural_interx_monitor)$coefficients[2,1]
+pm_decline_monitor_rural[1,2] <- summary(rural_interx_monitor)$coefficients[2,1] - sd_vector[1]
+pm_decline_monitor_rural[1,3] <- summary(rural_interx_monitor)$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 38
+for (i in 2:19){
+  pm_decline_monitor_rural[i,1] <- summary(rural_interx_monitor)$coefficients[2,1]+
+    summary(rural_interx_monitor)$coefficients[yr_ct,1]
+  pm_decline_monitor_rural[i,2] <- summary(rural_interx_monitor)$coefficients[2,1]+
+    summary(rural_interx_monitor)$coefficients[yr_ct,1] - sd_vector[i]
+  pm_decline_monitor_rural[i,3] <- summary(rural_interx_monitor)$coefficients[2,1]+
+    summary(rural_interx_monitor)$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+pm_decline_monitor_rural
+# set col names
+colnames(pm_decline_monitor_rural) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_monitor_rural$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+monitor_interx_rural <- ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_monitor_rural,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_monitor_rural,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_monitor_rural,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Measured ", PM[2.5], " Difference in Rural AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+monitor_interx_rural 
+
+grob <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+# Plot
+monitor_interx_rural + annotation_custom(grob)
+```
+
+### Model Data: Run regressions for main analysis (all counties) and sensitivity analysis (rural counties)
+
+#### Main Analysis
+
+```{r}
+# Split population density and hhincome into deciles for model
+model_PM25$popd_q <- cut(model_PM25$pop_density, quantile(model_PM25$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+model_PM25$hhinc_q <- cut(model_PM25$hh_income, quantile(model_PM25$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+model_PM25
+sum(table(model_PM25$popd_q, exclude = NULL)) == dim(model_PM25)[1]
+
+# edit cols to fit model function for linear mixed effects model
+model_PM25$county_type <- as.factor(as.character(model_PM25$county_type))
+
+  # set referent
+model_PM25$county_type <- relevel(model_PM25$county_type,
+                                         ref = "0")
+model_PM25$Year <- as.factor(model_PM25$Year)
+model_PM25 <- dplyr::rename(model_PM25, year=Year)
+
+# rename column for PM25 to match predefined function arguments
+model_lmer <-  dplyr::rename(model_PM25,annual_mean_all=PM25)
+
+# Run LMER (crude, partial, adjusted)
+summary(detrend_lmer_crude(model_lmer))
+summary(detrend_lmer_partial(model_lmer))
+summary(detrend_lmer_full(model_lmer))
+
+# All Models output table
+stargazer(detrend_lmer_crude(model_lmer),
+          detrend_lmer_partial(model_lmer),
+          detrend_lmer_full(model_lmer),
+          ci=T)
+```
+
+#### Rural Counties; Sensitivity Analysis
+
+```{r}
+# subset rural counties
+rural_model <- model_lmer %>% filter(as.numeric(as.factor(land_use)) >=4)
+rural_model
+#Run on Model Data for rural counties
+summary(detrend_lmer_full(rural_model))
+summary(detrend_lmer_partial(rural_model))
+summary(detrend_lmer_crude(rural_model))
+
+#output latex table
+stargazer(detrend_lmer_full(rural_model), ci=T)
+```
+
+#### Plot time-varying effect of AI/Non-AI county type binary variable (county_type interaction effect with year)
+
+##### All Main Analysis Counties
+```{r}
+# 8/17/20 edit: first define variable for model function to avoid rerunning it a million times
+main_interx_modeled <- detrend_lmer_full_catyr_intx(model_lmer)
+
+# vcov matrix
+native_yr_vcov <- vcov(main_interx_modeled)[c(2,seq(39,56)), c(2,seq(39,56))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all <- data.frame()
+pm_decline_model_all[1,1] <- summary(main_interx_modeled)$coefficients[2,1]
+pm_decline_model_all[1,2] <- summary(main_interx_modeled)$coefficients[2,1] - sd_vector[1]
+pm_decline_model_all[1,3] <- summary(main_interx_modeled)$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_all[i,1] <- summary(main_interx_modeled)$coefficients[2,1]+
+    summary(main_interx_modeled)$coefficients[yr_ct,1]
+  pm_decline_model_all[i,2] <- summary(main_interx_modeled)$coefficients[2,1]+
+    summary(main_interx_modeled)$coefficients[yr_ct,1] - sd_vector[i]
+  pm_decline_model_all[i,3] <- summary(main_interx_modeled)$coefficients[2,1]+
+    summary(main_interx_modeled)$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+model_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  # ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+model_interx_plot 
+
+# 8/28 for paper
+grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+# Plot
+model_interx_plot + annotation_custom(grob)
+```
+
+##### Rural Main Analysis Counties only
+```{r}
+# 8/17/20 edit: first define variable for model function to avoid rerunning it a million times
+rural_interx_modeled <- detrend_lmer_full_catyr_intx(rural_model)
+
+# vcov matrix
+native_yr_vcov <- vcov(rural_interx_modeled)[c(2,seq(39,56)), c(2,seq(39,56))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+var_vector
+sd_vector <- sqrt(var_vector)
+length(sd_vector)
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_rural <- data.frame()
+pm_decline_model_rural[1,1] <- summary(rural_interx_modeled)$coefficients[2,1]
+pm_decline_model_rural[1,2] <- summary(rural_interx_modeled)$coefficients[2,1] - sd_vector[1]
+pm_decline_model_rural[1,3] <- summary(rural_interx_modeled)$coefficients[2,1] + sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_rural[i,1] <- summary(rural_interx_modeled)$coefficients[2,1]+
+    summary(rural_interx_modeled)$coefficients[yr_ct,1]
+  pm_decline_model_rural[i,2] <- summary(rural_interx_modeled)$coefficients[2,1]+
+    summary(rural_interx_modeled)$coefficients[yr_ct,1] - sd_vector[i]
+  pm_decline_model_rural[i,3] <- summary(rural_interx_modeled)$coefficients[2,1]+
+    summary(rural_interx_modeled)$coefficients[yr_ct,1] + sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+pm_decline_model_rural
+# set col names
+colnames(pm_decline_model_rural) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_rural$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+model_interx_rural <- ggplot() + theme_linedraw() + 
+  geom_line(data = pm_decline_model_rural,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_rural,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_rural,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in Rural AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+model_interx_rural 
+
+grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+# Plot
+model_interx_rural + annotation_custom(grob)
+```
+

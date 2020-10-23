@@ -1,0 +1,360 @@
+---
+title: 'Part 4: Table 1'
+author: "Maggie Li (ml4424)"
+date: "10/12/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(xtable)
+```
+
+## Table 1: Descriptive Statistics by County for all counties, all counties with monitors, rural counties, rural counties with monitors (AI/Non-AI)
+
+Characteristics include: number of counties, mean annual PM2.5 monitor count, mean monitor PM2.5 concentration, mean model PM2.5 concentration, mean population density, mean household income.
+
+I created two tables, one with all counties and counties with monitors (first chunk), the next with rural counties and rural counties with monitors (second chunk).
+
+August 4 update: fixed the mean annual concentrations by monitor and SD
+
+### All Counties 
+```{r}
+# First table has columns for all counties and all counties with monitors
+# Join 
+all_native_counties_full <- inner_join(all_native_counties, covariates)
+all_general_counties_full <- inner_join(all_general_counties, covariates)
+#Number of counties
+num_counties_row_main <- data.frame(nrow(all_native_counties_full),
+                                    nrow(all_general_counties_full),
+                                    nrow(all_avg_exp %>% filter(county_type==1)),
+                                    nrow(all_avg_exp %>% filter(county_type==0)))
+names(num_counties_row_main) <- c("AI-Populated County", 
+                                  "Non-AI-Populated County",
+                                  "AI-Populated County with monitors",
+                                  "Non-AI-Populated County with monitors")
+
+#Mean monitor count and SD
+native_avgmon_full <- all_avgmon_full %>% filter(county_type == 1) 
+general_avgmon_full <- all_avgmon_full %>% filter(county_type == 0)
+native_monitors_avgmon_full <- all_avgmon_full %>% filter(county_type == 1,
+                                                           avg_mon > 0) 
+general_monitors_avgmon_full <- all_avgmon_full %>% filter(county_type == 0,
+                                                           avg_mon >0)
+mean_mon_row_main <- data.frame(mean(native_avgmon_full$avg_mon),
+                                mean(general_avgmon_full$avg_mon),
+                                mean(native_monitors_avgmon_full$avg_mon),
+                                mean(general_monitors_avgmon_full$avg_mon))
+names(mean_mon_row_main) <- names(num_counties_row_main)
+
+sd_mon_row_main <- data.frame(sd(native_avgmon_full$avg_mon),
+                                sd(general_avgmon_full$avg_mon),
+                                sd(native_monitors_avgmon_full$avg_mon),
+                                sd(general_monitors_avgmon_full$avg_mon))
+names(sd_mon_row_main) <- names(num_counties_row_main)
+
+#Mean Annual Concentrations by Monitors & SD
+native_avg_exp <- all_avg_exp %>% filter(county_type == 1)
+general_avg_exp <- all_avg_exp %>% filter(county_type == 0)
+
+avg_PM25_row_main <-data.frame(mean(native_avg_exp$avg_pm_all),
+                               mean(general_avg_exp$avg_pm_all),
+                               mean(native_avg_exp$avg_pm_all),
+                               mean(general_avg_exp$avg_pm_all))
+names(avg_PM25_row_main) <- names(num_counties_row_main) 
+sd_PM25_row_main <- data.frame(sd(native_avg_exp$avg_pm_all),
+                               sd(general_avg_exp$avg_pm_all),
+                               sd(native_avg_exp$avg_pm_all),
+                               sd(general_avg_exp$avg_pm_all))
+names(sd_PM25_row_main) <- names(num_counties_row_main) 
+
+#Mean Annual Concentrations by Model & SD
+  # First, obtain average model data
+avg_modelPM25 <- spread(model_PM25, key = Year, value = PM25)
+
+
+avg_modelPM25$avg_modelpm <- rowMeans(avg_modelPM25[c(seq(11,29))], na.rm = TRUE) #get mean of all study years 2000-2018
+avg_modelPM25 
+
+native_modelexp <- avg_modelPM25 %>% filter(county_type == 1)
+general_modelexp <- avg_modelPM25 %>% filter(county_type == 0)
+
+avg_modelPM25$county_type <- as.factor(avg_modelPM25$county_type) #need to convert into a factor to join with the other dataset
+
+# modeled pm2.5 for counties with monitors
+native_monitor_modelexp <- avg_modelPM25 %>% inner_join(native_avg_exp) %>%
+  filter(county_type == 1)
+
+general_monitor_modelexp <- avg_modelPM25 %>% inner_join(general_avg_exp) %>%
+  filter(county_type == 0)
+general_monitor_modelexp
+
+# make avg model row
+avg_modelPM25_row_main <-data.frame(mean(native_modelexp$avg_modelpm),
+                               mean(general_modelexp$avg_modelpm),
+                               mean(native_monitor_modelexp$avg_modelpm),
+                               mean(general_monitor_modelexp$avg_modelpm))
+names(avg_modelPM25_row_main) <- names(num_counties_row_main) 
+
+sd_modelPM25_row_main <- data.frame(sd(native_modelexp$avg_modelpm),
+                               sd(general_modelexp$avg_modelpm),
+                               sd(native_monitor_modelexp$avg_modelpm),
+                               sd(general_monitor_modelexp$avg_modelpm))
+names(sd_modelPM25_row_main) <- names(num_counties_row_main) 
+
+#covariate mean and SD rows
+  # population density
+popdensity_row_main <- data.frame(mean(native_avgmon_full$pop_density),
+                                  mean(general_avgmon_full$pop_density),
+                                  mean(native_monitors_avgmon_full$pop_density),
+                                  mean(general_monitors_avgmon_full$pop_density))
+names(popdensity_row_main) <- names(num_counties_row_main) 
+
+sd_popden_main <- data.frame(sd(native_avgmon_full$pop_density),
+                                  sd(general_avgmon_full$pop_density),
+                                  sd(native_monitors_avgmon_full$pop_density),
+                                  sd(general_monitors_avgmon_full$pop_density))
+names(sd_popden_main) <- names(num_counties_row_main) 
+
+  # hh income
+hhinc_row_main <- data.frame(mean(native_avgmon_full$hh_income),
+                             mean(general_avgmon_full$hh_income),
+                             mean(native_monitors_avgmon_full$hh_income),
+                             mean(general_monitors_avgmon_full$hh_income))
+names(hhinc_row_main) <- names(num_counties_row_main) 
+sd_hhinc_main <- data.frame(sd(native_avgmon_full$hh_income),
+                             sd(general_avgmon_full$hh_income),
+                             sd(native_monitors_avgmon_full$hh_income),
+                             sd(general_monitors_avgmon_full$hh_income))
+names(sd_hhinc_main) <- names(num_counties_row_main) 
+
+
+#round mean rows
+num_counties_row_main[] <- lapply(num_counties_row_main,as.integer)
+mean_mon_row_main <- format(round(mean_mon_row_main, 1), nsmall = 1)
+avg_PM25_row_main <- format(round(avg_PM25_row_main, 1), nsmall = 1)
+avg_modelPM25_row_main <-format(round(avg_modelPM25_row_main, 1), nsmall = 1)
+popdensity_row_main[] <- lapply(popdensity_row_main,as.integer)
+hhinc_row_main[] <- lapply(hhinc_row_main,as.integer)
+
+#round sd rows
+sd_mon_row_main <- format(round(sd_mon_row_main, 1), nsmall = 1)
+sd_PM25_row_main <- format(round(sd_PM25_row_main, 1), nsmall = 1)
+sd_modelPM25_row_main <-format(round(sd_modelPM25_row_main, 1), nsmall = 1)
+sd_popden_main[] <- lapply(sd_popden_main, as.integer)
+sd_hhinc_main[] <- lapply(sd_hhinc_main, as.integer)
+
+
+sd_mon_row_main
+sd_PM25_row_main
+sd_popden_main
+sd_hhinc_main
+
+#make list of rows
+rows_list_main <- list(num_counties_row_main,
+      mean_mon_row_main,
+      avg_PM25_row_main,
+      avg_modelPM25_row_main,
+      popdensity_row_main,
+      hhinc_row_main)
+rows_list_main
+#rbind all rows together
+table_1_main <- do.call(rbind, rows_list_main)
+table_1_main
+row.names(table_1_main) <- c("Number of Counties",
+                             "Average Monitor Count per year",
+                        "Mean Monitor PM2.5 Concentration",
+                        "Mean Model PM2.5 Concentrations",
+                        "Population Density",
+                        "HH Income")
+require(data.table) #need to convert for latex export
+test <- setDT(table_1_main)
+main_table1 <- xtable(test)
+main_table1
+
+#sd table (to manually input to table 1)
+row_list_sd <- list(sd_mon_row_main,
+                    sd_PM25_row_main,
+                    sd_modelPM25_row_main,
+                    sd_popden_main,
+                    sd_hhinc_main)
+table_1_sd <- do.call(rbind,row_list_sd)
+row.names(table_1_sd) <- c("SD Mean Monitor Count",
+                           "SD Monitor PM2.5",
+                        "SD Model PM2.5",
+                        "Population Density",
+                        "HH Income")
+test_sd <- setDT(table_1_sd)
+main_table_sd <- xtable(test_sd)
+main_table_sd
+```
+
+### Rural Counties
+Note: I use the same variable names as above in intermediate steps for calculating each of the characteristics (overwriting values), so please run each chunk in their entirety to ensure the output tables
+
+```{r}
+# Table 1.2: Second table has columns for rural counties and rural counties with monitors
+rural_native <- all_native_counties_full %>% filter(as.numeric(land_use) >= 4)
+rural_general <- all_general_counties_full %>% filter(as.numeric(land_use) >= 4)
+
+#Number of counties
+num_counties_row_main <- data.frame(nrow(rural_native),
+                                    nrow(rural_general),
+                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 4,
+                                                                county_type==1)),
+                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 4,
+                                                                county_type==0)))
+names(num_counties_row_main) <- c("Rural AI-Populated County", 
+                                  "Rural Non-AI-Populated County",
+                                  "Rural AI-Populated County with monitors",
+                                  "Rural Non-AI-Populated County with monitors")
+
+# Rural counties: Mean monitor count & SD
+rural_native_avgmon <- native_avgmon_full %>% filter(as.numeric(land_use) >= 4)
+rural_general_avgmon <- general_avgmon_full %>% filter(as.numeric(land_use) >= 4)
+rural_native_monitors_avgmon <- rural_native_avgmon %>% filter(county_type == 1,
+                                                           avg_mon > 0) 
+rural_general_monitors_avgmon <- rural_general_avgmon %>% filter(county_type == 0,
+                                                           avg_mon >0)
+mean_mon_row_main <- data.frame(mean(rural_native_avgmon$avg_mon),
+                                mean(rural_general_avgmon$avg_mon),
+                                mean(rural_native_monitors_avgmon$avg_mon),
+                                mean(rural_general_monitors_avgmon$avg_mon))
+names(mean_mon_row_main) <- names(num_counties_row_main)
+
+sd_mon_row_main <- data.frame(sd(rural_native_avgmon$avg_mon),
+                                sd(rural_general_avgmon$avg_mon),
+                                sd(rural_native_monitors_avgmon$avg_mon),
+                                sd(rural_general_monitors_avgmon$avg_mon))
+names(sd_mon_row_main) <- names(num_counties_row_main)
+
+# Rural counties: monitor mean concentrations & SD
+rural_native_avgexp <- native_avg_exp %>% filter(as.numeric(land_use) >= 4)
+rural_general_avgexp <- general_avg_exp %>% filter(as.numeric(land_use) >= 4)
+
+# new variables for PM2.5 concentrations in counties with monitors
+monitors_rural_avgexp <- rural_native_avgexp
+monitors_general_avgexp <- rural_general_avgexp
+
+avg_PM25_row_main <-data.frame(mean(rural_native_avgexp$avg_pm_all),
+                               mean(rural_general_avgexp$avg_pm_all),
+                               mean(monitors_rural_avgexp$avg_pm_all),
+                               mean(monitors_general_avgexp$avg_pm_all))
+names(avg_PM25_row_main) <- names(num_counties_row_main) 
+
+sd_PM25_row_main <- data.frame(sd(rural_native_avgexp$avg_pm_all),
+                               sd(rural_general_avgexp$avg_pm_all),
+                               sd(monitors_rural_avgexp$avg_pm_all),
+                               sd(monitors_general_avgexp$avg_pm_all))
+names(sd_PM25_row_main) <- names(num_counties_row_main) 
+# Rural counties: model mean concentrations & SD
+rural_native_modelexp <- avg_modelPM25 %>% filter(county_type == 1,
+                                                  as.numeric(land_use) >= 4)
+rural_general_modelexp <- avg_modelPM25 %>% filter(county_type == 0,
+                                                   as.numeric(land_use) >= 4)
+rural_native_monitor_modelexp <- avg_modelPM25 %>% inner_join(native_avg_exp) %>%
+  filter(county_type == 1, as.numeric(land_use) >= 4)
+rural_general_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_general_avgexp) %>%
+  filter(county_type == 0, as.numeric(land_use) >= 4)
+
+
+avg_modelPM25_row_main <-data.frame(mean(rural_native_modelexp$avg_modelpm),
+                               mean(rural_general_modelexp$avg_modelpm),
+                               mean(rural_native_monitor_modelexp$avg_modelpm),
+                               mean(rural_general_monitor_modelexp$avg_modelpm))
+names(avg_modelPM25_row_main) <- names(num_counties_row_main) 
+
+sd_modelPM25_row_main <- data.frame(sd(rural_native_modelexp$avg_modelpm),
+                               sd(rural_general_modelexp$avg_modelpm),
+                               sd(rural_native_monitor_modelexp$avg_modelpm),
+                               sd(rural_general_monitor_modelexp$avg_modelpm))
+names(sd_modelPM25_row_main) <- names(num_counties_row_main) 
+
+#covariate mean rows! &SD
+  # population density
+popdensity_row_main <- data.frame(mean(rural_native_avgmon$pop_density),
+                                  mean(rural_general_avgmon$pop_density),
+                                  mean(rural_native_monitors_avgmon$pop_density),
+                                  mean(rural_general_monitors_avgmon$pop_density))
+names(popdensity_row_main) <- names(num_counties_row_main) 
+
+sd_popden_main <- data.frame(sd(rural_native_avgmon$pop_density),
+                                  sd(rural_general_avgmon$pop_density),
+                                  sd(rural_native_monitors_avgmon$pop_density),
+                                  sd(rural_general_monitors_avgmon$pop_density))
+names(sd_popden_main) <- names(num_counties_row_main) 
+
+  # hh income
+hhinc_row_main <- data.frame(mean(rural_native_avgmon$hh_income),
+                             mean(rural_general_avgmon$hh_income),
+                             mean(rural_native_monitors_avgmon$hh_income),
+                             mean(rural_general_monitors_avgmon$hh_income))
+names(hhinc_row_main) <- names(num_counties_row_main) 
+sd_hhinc_main <- data.frame(sd(rural_native_avgmon$hh_income),
+                             sd(rural_general_avgmon$hh_income),
+                             sd(rural_native_monitors_avgmon$hh_income),
+                             sd(rural_general_monitors_avgmon$hh_income))
+names(sd_hhinc_main) <- names(num_counties_row_main) 
+
+
+#round mean rows first
+num_counties_row_main[] <- lapply(num_counties_row_main,as.integer)
+mean_mon_row_main <- format(round(mean_mon_row_main, 1), nsmall = 1)
+avg_PM25_row_main <- format(round(avg_PM25_row_main, 1), nsmall = 1)
+avg_modelPM25_row_main <-format(round(avg_modelPM25_row_main, 1), nsmall = 1)
+popdensity_row_main[] <- lapply(popdensity_row_main,as.integer)
+hhinc_row_main[] <- lapply(hhinc_row_main,as.integer)
+
+#round sd rows
+sd_mon_row_main <- format(round(sd_mon_row_main, 1), nsmall = 1)
+sd_PM25_row_main <- format(round(sd_PM25_row_main, 1), nsmall = 1)
+sd_modelPM25_row_main <-format(round(sd_modelPM25_row_main, 1), nsmall = 1)
+sd_popden_main[] <- lapply(sd_popden_main, as.integer)
+sd_hhinc_main[] <- lapply(sd_hhinc_main, as.integer)
+
+
+sd_mon_row_main
+sd_PM25_row_main
+sd_popden_main
+sd_hhinc_main
+
+#make list of rows
+rows_list_main_rural <- list(num_counties_row_main,
+      mean_mon_row_main,
+      avg_PM25_row_main,
+      avg_modelPM25_row_main,
+      popdensity_row_main,
+      hhinc_row_main)
+rows_list_main_rural
+#rbind all rows together
+table_1_main_rural <- do.call(rbind, rows_list_main_rural)
+table_1_main_rural
+row.names(table_1_main_rural) <- c("Number of Counties",
+                             "Average Monitor Count per year",
+                        "Mean Monitor PM2.5 Concentration",
+                        "Mean Model PM2.5 Concentrations",
+                        "Population Density",
+                        "HH Income")
+require(data.table) #need to convert for latex export
+table1_rural_dt <- setDT(table_1_main_rural)
+main_table1_rural <- xtable(table1_rural_dt)
+main_table1_rural
+
+#sd table (to manually input to table 1)
+row_list_sd_rural <- list(sd_mon_row_main,
+                    sd_PM25_row_main,
+                    sd_modelPM25_row_main,
+                    sd_popden_main,
+                    sd_hhinc_main)
+table_1_sd_rural <- do.call(rbind,row_list_sd_rural)
+row.names(table_1_sd_rural) <- c("SD Mean Monitor Count",
+                           "SD Monitor PM2.5",
+                        "SD Model PM2.5",
+                        "Population Density",
+                        "HH Income")
+table1_sd_rural <- setDT(table_1_sd_rural)
+main_table_sd_rural <- xtable(table1_sd_rural)
+main_table_sd_rural
+```
+
+I manually joined the two (all counties and rural counties) and just messed with the formatting in LaTeX a bit to make it all into one table. :)

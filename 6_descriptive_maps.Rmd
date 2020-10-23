@@ -1,0 +1,321 @@
+---
+title: 'Part 6: Descriptive Map'
+author: "Maggie Li (ml4424)"
+date: "10/12/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(leaflet)
+library(htmltools)
+```
+
+## Descriptive Map of all the AI Counties
+
+### Define AI counties as an sp file, by joining county lists of all 3 classifications with a county shapefile
+```{r}
+#map all native counties; to get sense of location to compare to monitor coverage
+counties <- readOGR("Data/cb_2018_us_county_500k/cb_2018_us_county_500k.shp")
+summary(counties)
+
+#census
+census_counties <- census %>%
+  dplyr::rename(GEOID = County)
+census_counties$State <- substr(census_counties$GEOID, 0, 2)
+census_counties$State <- as.numeric(census_counties$State)
+census_counties <- census_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+census_counties
+census_shp <- merge(counties, census_counties, by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(census_counties$GEOID)
+length(census_shp$GEOID) #excludes 1 county
+
+#cluster
+cluster_counties <- cluster %>%
+  dplyr::rename(GEOID = County)
+cluster_counties$State <- substr(cluster_counties$GEOID, 0, 2)
+cluster_counties$State <- as.numeric(as.character(cluster_counties$State))
+cluster_counties <- cluster_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+cluster_counties
+cluster_shp <- merge(counties, cluster_counties, by = 'GEOID', 
+                     all = FALSE, duplicateGeoms = TRUE)
+summary(cluster_shp)
+length(cluster_counties$GEOID)
+length(cluster_shp$GEOID) 
+
+#reservation
+reservation_counties <- reservation %>% dplyr::rename(GEOID = County)
+reservation_counties$State <- substr(reservation_counties$GEOID, 0, 2)
+reservation_counties$State <- as.numeric(reservation_counties$State)
+reservation_counties <- reservation_counties %>% 
+  filter(State <= 56,
+         State != 2,
+         State != 15) 
+unique(reservation_counties$GEOID)
+reservation_shp <- merge(counties, reservation_counties, by = 'GEOID', 
+                 all = FALSE, duplicateGeoms = TRUE)
+length(reservation_counties$GEOID)
+length(reservation_shp$GEOID) 
+```
+
+### Define monitor locations on AI counties to include in map
+
+I differentiated between monitors active for 1-10 years and 11-19 years.
+**July 30 update:** Plotted all PM2.5 monitors as just black points (rather than differentiating between monitors active for less than half or half or greater study years) so this section is commented out
+
+```{r}
+all_native_counties #recall df of distinct AI-classified counties
+
+active_native_mon <- list(length(PM25_all))
+for (i in 1:length(PM25_all)){
+  active_native_mon[[i]] <- inner_join(PM25_all[[i]], all_native_counties)
+}
+agg_native_mon <- do.call(rbind, active_native_mon)
+agg_native_mon # df of any active monitors across all study years
+# 
+# #filter by less than half or more than half of study years active
+# agg_native_mon <- agg_native_mon %>% 
+#   dplyr::select(-annual_mean)
+# agg_native_mon <- agg_native_mon %>% dplyr::count(County, Latitude, Longitude) #new column n counts how many years each monitor (denoted by lat lon) is active
+# agg_native_mon <- agg_native_mon %>% mutate(active = case_when(
+#   n <= 10 ~ "1",
+#   n > 10 ~ "2"
+# )) #new column 'active' denotes monitors active for 1-10 years (active = 1) and those that are active for 11-19 years (active = 2)
+# agg_native_mon
+# agg_native_mon$State <- substr(agg_native_mon$County, 0, 2)
+# #need to recode State as numeric, for random effects
+# agg_native_mon$State <- as.numeric(agg_native_mon$State)
+# #filter out territories, AL and HI
+# agg_native_mon <- agg_native_mon %>% filter(State <= 56,
+#                                       State != 2,
+#                                       State != 15)
+# view(agg_native_mon) #check that 'active' column should have entry 1 if 'n' column is less than or equal to 10, entry 2 if 'n' column greater than 10
+```
+
+### Map counties and monitor locations in Leaflet
+
+Note: I'll probably end up mapping it in ggplot2 for the paper, so this is just a placeholder figure in the manuscript, just to make sure counties are showing up correctly.
+
+8/5 Update: Map of native counties and ALL PM2.5 monitors
+```{r}
+# all_monitors <- do.call(rbind, PM25_all)
+# all_unique_mon <- unique(all_monitors[c("Latitude", "Longitude")])
+# # some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# # different color polygons for the different county classifications and black points to symbolize locations of monitors
+# colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# labels <- c("Native Census Population >5% County", 
+#                       "Rural Wallace et al. Cluster",
+#                       "County within Reservation",
+#             "PM2.5 Monitor")
+# sizes <- c(10, 10, 10, 5)
+# shapes <- c("square", "square", "square", "circle")
+# borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+#           make_shapes <- function(colors, sizes, borders, shapes) {
+#               shapes <- gsub("circle", "50%", shapes)
+#               shapes <- gsub("square", "0%", shapes)
+#               paste0(colors, "; width:", sizes, "px; height:", sizes, 
+#                      "px; border:3px solid ", borders, "; border-radius:", shapes)
+#           }
+#           make_labels <- function(sizes, labels) {
+#               paste0("<div style='display: inline-block;height: ", 
+#                      sizes, "px;margin-top: 4px;line-height: ", 
+#                      sizes, "px;'>", labels, "</div>")
+#           }
+# 
+#           legend_colors <- make_shapes(colors, sizes, borders, shapes)
+#           legend_labels <- make_labels(sizes, labels)
+# 
+#           return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+#                            position = "topright"))}
+# native_allmon_map <- leaflet() %>%
+#   addProviderTiles("CartoDB.PositronNoLabels") %>%
+#   addPolygons(data = census_shp, color = "#8dd3c7",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = cluster_shp, color = "#ffffb3", 
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = reservation_shp, color = "#fb8072",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addLegendCustom(colors, labels, sizes, shapes, borders,
+#                   title = "American Indian Populated Counties") %>%
+#   addCircleMarkers(data = all_unique_mon,
+#                    lng = ~Longitude,
+#                    lat = ~Latitude,
+#                    radius = 1.5,
+#                    stroke = FALSE, fillOpacity = 0.85,
+#                    color = "black")
+# native_allmon_map
+```
+
+
+Map of native counties and only PM2.5 monitors in native counties
+```{r}
+# # some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# # different color polygons for the different county classifications and black points to symbolize locations of monitors
+# colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# labels <- c("Native Census Population >5% County", 
+#                       "Rural Wallace et al. Cluster",
+#                       "County within Reservation",
+#             "PM2.5 Monitor")
+# sizes <- c(10, 10, 10, 5)
+# shapes <- c("square", "square", "square", "circle")
+# borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#000000")
+# addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+#           make_shapes <- function(colors, sizes, borders, shapes) {
+#               shapes <- gsub("circle", "50%", shapes)
+#               shapes <- gsub("square", "0%", shapes)
+#               paste0(colors, "; width:", sizes, "px; height:", sizes, 
+#                      "px; border:3px solid ", borders, "; border-radius:", shapes)
+#           }
+#           make_labels <- function(sizes, labels) {
+#               paste0("<div style='display: inline-block;height: ", 
+#                      sizes, "px;margin-top: 4px;line-height: ", 
+#                      sizes, "px;'>", labels, "</div>")
+#           }
+# 
+#           legend_colors <- make_shapes(colors, sizes, borders, shapes)
+#           legend_labels <- make_labels(sizes, labels)
+# 
+#           return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+#                            position = "topright"))}
+# native_counties_map <- leaflet() %>%
+#   addProviderTiles("CartoDB.PositronNoLabels") %>%
+#   addPolygons(data = census_shp, color = "#8dd3c7",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = cluster_shp, color = "#ffffb3", 
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = reservation_shp, color = "#fb8072",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addLegendCustom(colors, labels, sizes, shapes, borders,
+#                   title = "American Indian Populated Counties") %>%
+#   addCircleMarkers(data = agg_native_mon,
+#                    lng = ~Longitude,
+#                    lat = ~Latitude,
+#                    radius = 1.5,
+#                    stroke = FALSE, fillOpacity = 0.85,
+#                    color = "black")
+# native_counties_map
+```
+
+Old code for differentiating between monitors active for less than half or greater than or equal than half of study years below:
+```{r}
+# # make palette for monitor colors based on years active status
+# activeyrs_pal <- colorFactor(c("#80b1d3", "#fdb462"), domain = c("1", "2"))
+# pal_native_mon <- colorNumeric(
+#   palette = "inferno", 
+#   domain = agg_native_mon$n,
+#   reverse = TRUE)
+# 
+# # some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# colors <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#80b1d3", "#fdb462")
+# labels <- c("Native Census Population >5% County", 
+#                       "Rural Wallace et al. Cluster",
+#                       "County within Reservation",
+#             "Monitors Active Less than or Equal to Half of Study Years",
+#               "Monitors Active Greater than Half of Years")
+# sizes <- c(10, 10, 10, 5, 5)
+# shapes <- c("square", "square", "square", "circle", "circle")
+# borders <- c("#8dd3c7",  "#ffffb3", "#fb8072", "#80b1d3", "#fdb462")
+# addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+#           make_shapes <- function(colors, sizes, borders, shapes) {
+#               shapes <- gsub("circle", "50%", shapes)
+#               shapes <- gsub("square", "0%", shapes)
+#               paste0(colors, "; width:", sizes, "px; height:", sizes, 
+#                      "px; border:3px solid ", borders, "; border-radius:", shapes)
+#           }
+#           make_labels <- function(sizes, labels) {
+#               paste0("<div style='display: inline-block;height: ", 
+#                      sizes, "px;margin-top: 4px;line-height: ", 
+#                      sizes, "px;'>", labels, "</div>")
+#           }
+# 
+#           legend_colors <- make_shapes(colors, sizes, borders, shapes)
+#           legend_labels <- make_labels(sizes, labels)
+# 
+#           return(addLegend(map, colors = legend_colors, labels = legend_labels, opacity = opacity, title = title,
+#                            position = "bottomleft"))}
+# native_counties_map <- leaflet() %>%
+#   addProviderTiles(providers$CartoDB.Positron) %>%
+#   addPolygons(data = census_shp, color = "#8dd3c7",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = cluster_shp, color = "#ffffb3", 
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addPolygons(data = reservation_shp, color = "#fb8072",
+#               fillOpacity = 0.8, weight = 3) %>%
+#   addLegendCustom(colors, labels, sizes, shapes, borders,
+#                   title = "American Indian Populated Counties") %>%
+#   addCircleMarkers(data = agg_native_mon,
+#                    lng = ~Longitude,
+#                    lat = ~Latitude,
+#                    radius = 3,
+#                    stroke = FALSE, fillOpacity = 0.85,
+#                    color = ~activeyrs_pal(agg_native_mon$active))
+# native_counties_map
+```
+### Map with just counties locations (no monitors)
+
+```{r}
+# some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#8dd3c7",  "#ffffb3", "#fb8072")
+labels <- c("Native Census Population >5% County", 
+                      "Rural Wallace et al. Cluster",
+                      "County within Reservation")
+sizes <- c(10, 10, 10)
+shapes <- c("square", "square", "square")
+borders <- c("#8dd3c7",  "#ffffb3", "#fb8072")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, 
+                           labels = legend_labels, 
+                           opacity = opacity, 
+                           title = title,
+                           position = "topright"))}
+no_monitors_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = census_shp, color = "#8dd3c7",
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = cluster_shp, color = "#ffffb3", 
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = reservation_shp, color = "#fb8072",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "American Indian Populated Counties")
+
+##Adjust size of legend
+browsable(
+ tagList(
+    list(
+       tags$head(
+          tags$style(
+             ".leaflet .legend {
+               line-height: 15px;
+               font-size: 15px;
+               }",
+            ".leaflet .legend i{
+              width: 15px;
+              height: 15px;
+               }"
+          )
+       ),
+     no_monitors_map)))
+
+```

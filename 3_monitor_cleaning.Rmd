@@ -1,0 +1,460 @@
+---
+title: "Part 3: Monitor Coverage & Concentrations"
+author: "Maggie Li (ml4424)"
+date: "10/12/2020"
+output: html_document
+---
+
+## 3.1 Descriptive statistics & bar graph for monitor coverage in native/non-native counties (by different classifications)
+### 3.1.1 Define fxn to calculate average # monitors per year for each county by county type, frequency plots of monitor distributions
+
+```{r}
+#1. Function to do get avg mon by county:
+avg_mon <- function(data, county_type){
+  monitors <- do.call(rbind, data) #create one long table with all years
+  monitors$county_type <- county_type
+  monitors <- subset(monitors, select = c(County, num_mon, county_type, year))
+  #make long -> wide with spread, in order to have columns of each year's values, and then find the mean of these columns
+  monitors <- spread(monitors, key = year, value = num_mon, fill = 0)
+  monitors$avg_mon <- rowMeans(monitors[c(seq(3,21))])
+  #only select the county, county_type for IDing in the bar plot, and avg # of monitor value columns
+  monitors <- subset(monitors,select = c(County, county_type, avg_mon))
+  return(monitors)}
+
+#2. Frequency function to get proportion of average monitors per county across all years, using output from avg_mon:
+mon_freq <- function(data, county_type){
+  freq <- plyr::count(data$avg_mon) #tbl with second column that records frequencies of the diff avg_mon values
+  freq$prop <- freq$freq/
+    sum(freq$freq) #new proportions column
+  #rename x to avg_mon
+  freq <- dplyr::rename(freq, avg_mon = x)
+  freq$county_type <- county_type
+  return(freq)} #for native and non-native, can check this output to see if area under curve adds up to 1
+
+#3. Function to combine frequencies of monitors for AI/non-AI counties and aggregate bins 
+combine_freq <- function(native_freq, general_freq){
+  all_mon <- rbind(general_freq, native_freq)
+  all_mon <- all_mon %>% 
+    mutate(bins = case_when(
+          avg_mon == 0 ~ "0",
+          avg_mon > 0 & avg_mon < 1 ~ "(0,1)", 
+          avg_mon >= 1 & avg_mon < 2 ~ "[1,2)",
+          avg_mon >= 2 ~ ">=2"))
+  all_mon$bins <- as.factor(all_mon$bins)
+  final_mon_tbl <- all_mon %>%
+    group_by(bins, county_type) %>%
+    dplyr::summarise(total_prop=sum(prop),
+                     total_freq=sum(freq)) %>% #summarize percent monitor (prop) and total num counties (freq) values for the four bins 
+    mutate(lvl_bins = factor(bins, levels = c("0","(0,1)", "[1,2)", ">=2"))) %>%
+    arrange(lvl_bins, county_type)
+  return(final_mon_tbl)
+}  
+```
+
+### 3.1.2 MAIN ANALYSIS: Monitor coverage for all AI/non-AI counties
+```{r}
+native_PM25_monitors <- avg_mon(all_native_PM25, "AI-Populated County")
+native_PM25_monitors
+native_PM25_freq <- mon_freq(native_PM25_monitors, "AI-Populated County")
+general_PM25_monitors <- avg_mon(all_general_PM25, "Non-AI Populated County")
+general_PM25_freq <- mon_freq(general_PM25_monitors, "Non-AI Populated County")
+
+all_PM25_tbl <- combine_freq(native_PM25_freq, general_PM25_freq)
+# all_PM25_tbl$total_prop <- all_PM25_tbl$total_prop*100 #convert decimal-percentage to actual percentage
+#check area under curve equals 1 for non-native and native
+sum(general_PM25_freq$prop)
+sum(native_PM25_freq$prop)
+
+#Bar graph all counties
+all_PM25_plot <- ggplot(all_PM25_tbl, 
+                            aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
+       fill = "County Type") 
+all_PM25_plot 
+all_PM25_tbl
+
+## test changing colors
+## AI = turquoise?
+## Non-AI = beige
+ggplot(all_PM25_tbl, aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 20),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        legend.title = element_text(size = 14),
+        legend.text = element_text(size = 12)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties") +
+  scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
+```
+
+#### 3.1.2.1 MAIN ANALYSIS: Chi-Squared test to compare monitor distributions
+```{r}
+# Run just part of the above function to get table of all unique avg_mon values for AI and non-AI populated counties, and then use table function to make contingency table
+native_PM25_monitors
+general_PM25_monitors
+all_mon <- rbind(general_PM25_freq, native_PM25_freq)
+all_mon <- all_mon %>% 
+  mutate(bins = case_when(
+        avg_mon == 0 ~ "0",
+        avg_mon > 0 & avg_mon < 1 ~ "(0,1)", 
+        avg_mon >= 1 & avg_mon < 2 ~ "[1,2)",
+        avg_mon >= 2 ~ ">=2"))
+all_mon$bins <- as.factor(all_mon$bins)
+final_mon_tbl <- all_mon %>%
+  group_by(bins, county_type)
+final_mon_tbl
+monitor_contingency <- table(final_mon_tbl$county_type, final_mon_tbl$bins)
+
+chisq.test(monitor_contingency)
+
+# Conclusion: monitor distribution is not independent of AI/non-AI populated county status
+```
+
+
+
+### 3.1.3 SENSITIVITY ANALYSIS: Monitor coverage for AI/non-AI counties of the 3 different classifications
+#### 3.1.3.1 Monitor coverage for census definition native/non-native counties
+```{r}
+#CENSUS avg monitors
+native_PM25_census_monitors <- avg_mon(native_PM25_census, "AI-Populated County")
+native_PM25_census_freq <- mon_freq(native_PM25_census_monitors, "AI-Populated County")
+general_PM25_census_monitors <- avg_mon(general_PM25$census, "Non-AI County")
+general_PM25_census_freq <- mon_freq(general_PM25_census_monitors, "Non-AI County")
+census_PM25_tbl <- combine_freq(native_PM25_census_freq, general_PM25_census_freq)
+census_PM25_tbl 
+native_PM25_census_freq
+
+#check area under curve equals 1 for non-native and native
+sum(general_PM25_census_freq$prop)
+sum(native_PM25_census_freq$prop)
+
+#Bar graph census counties
+census_PM25_plot <- ggplot(census_PM25_tbl, 
+                            aes(x=lvl_bins, 
+                                y = total_prop,
+                                fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 11)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution \n in AI vs Non-AI Populated Census Counties, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
+       fill = "County Type") 
+census_PM25_plot 
+```
+
+#### 3.1.3.2 Monitor coverage for cluster definition native/non-native counties
+```{r}
+#CLUSTER avg annual mon
+native_PM25_cluster_monitors <- avg_mon(native_PM25, "AI-Populated County")
+native_PM25_cluster_freq <- mon_freq(native_PM25_cluster_monitors, "AI-Populated County")
+general_PM25_cluster_monitors <- avg_mon(general_PM25$cluster, "Non-AI Populated County")
+general_PM25_cluster_freq <- mon_freq(general_PM25_cluster_monitors, "Non-AI Populated County")
+
+cluster_PM25_tbl <- combine_freq(general_PM25_cluster_freq, native_PM25_cluster_freq)
+sum(general_PM25_cluster_freq$prop)
+sum(native_PM25_cluster_freq$prop)
+
+# need to add in "fake" extra row for >=2 natives (since 0 native counties have more than 2 monitors)
+extra_row <- data.frame(">=2",
+               "AI-Populated County",
+               0.001,
+               0,
+               ">=2")
+names(extra_row) <- c(names(cluster_PM25_tbl))
+extra_row$county_type <- as.character(extra_row$county_type)
+cluster_PM25_tbl
+cluster_PM25_tbl <- bind_rows(cluster_PM25_tbl, extra_row)
+cluster_PM25_tbl$lvl_bins <- as.factor(cluster_PM25_tbl$lvl_bins)
+cluster_PM25_tbl
+#reorder factors
+cluster_PM25_tbl$lvl_bins <- factor(cluster_PM25_tbl$lvl_bins, 
+                                    levels = c("0", "(0,1)", "[1,2)", ">=2"))
+
+cluster_PM25_tbl
+cluster_PM25_plot <- ggplot(cluster_PM25_tbl, 
+                            aes(x=lvl_bins, 
+                                y = total_prop,
+                                fill=county_type)) + 
+  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  geom_bar(stat="identity", position = "dodge") +
+  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+  theme(plot.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 11)) +
+  labs(title = expression(paste(PM[2.5], " Monitor Distribution in Rural Clustered Counties, 2000-2018")),
+       x = "Average number of monitors per year by county type",
+       y = "Percent of Total Counties",
+       fill = "County Type")
+
+cluster_PM25_plot
+```
+
+####3.1.3.3 Monitor coverage for reservation definition native/non-native counties
+```{r}
+reservation_PM25_monitors <- avg_mon(reservation_PM25, "AI-Populated County")
+reservation_PM25_freq <- mon_freq(reservation_PM25_monitors, "AI-Populated County")
+
+general_PM25_reservations_monitors <-avg_mon(general_PM25$reservations, "General County")
+general_reservation_PM25_freq <- mon_freq(general_PM25_reservations_monitors,"General County")
+
+reservation_PM25_tbl <- combine_freq(reservation_PM25_freq,
+                                     general_reservation_PM25_freq)
+reservation_PM25_plot <- ggplot(reservation_PM25_tbl, 
+                            aes(x=lvl_bins, 
+                                y = total_prop,
+                                fill=county_type)) + 
+  geom_bar(stat="identity", position = "dodge") +
+  labs(title = "PM2.5 Monitor Distribution in Counties containing AI Reservations \n vs. Non-AI Counties",
+       x = "Average number of annual monitors per county type from 1999-2018",
+       y = "Proportion of Counties",
+       fill = "County Type")
+sum(reservation_PM25_freq$prop)
+sum(general_reservation_PM25_freq$prop)
+reservation_PM25_plot
+reservation_PM25_tbl
+```
+
+##3.2 Clean monitor data further to extract mean PM2.5 concentrations per county across all years, PM2.5 concentrations per county per EACH year, mean monitor count per county across all years, and monitor count per county per EACH year.
+
+Next off, we need to clean the data further to have estimates for our Table 1, PM2.5 concentration graphs by State over time, and statistical regression models. 
+
+###3.2.1 Compute Monitor Concentrations (averaged across all years and each annual average, per county)
+
+####3.2.1.1 Define functions
+
+I first define a function (drop_all_NA) that averages PM2.5 concentrations for each county across all available study years with monitors, and drops counties with NO MONITORS across all years from the AI/non-AI county dfs. The second function (combine_avg_exp) combines the two AI/non-AI county dfs into one df and gets the average PM2.5 concentration based on available monitor estimates; the native_status input is a binary indicator variable (1 = AI, 0 = non-AI) so you know which counties are which when all the counties are combined in a single df. When I run it, it's a function within a function (see below). The final output df is a table with each row entry being a county, and the average PM2.5 concentration across all study years.
+
+The third function (exp_ctyear) iterates through all counties for each study year (no averaging) and drops county-years with NO MONITORS. The fourth function (combine_allexp), similar to the second function, combines the two AI/non-AI county dfs into one df, also joining it with the covariates df defined above, adding extra columns for state FIPS, population density & HH income quantiles, which are later used in the regression models. The final output df is a table with each row entry being a county in a given year, and the average PM2.5 concentration in that particular year; thus, counties will have multiple row entries if they had active monitor(s) in multiple years.
+
+```{r}
+#FUNCTION to extract PM2.5 exposure, averaged across all years, dropping counties with ALL NAs (i.e. counties with no monitors across all years)
+drop_all_NA <- function(annual_data, native_status){
+  int_data <- do.call(rbind, annual_data) #create one long table with all years
+  int_data$county_type <- native_status
+  int_data$county_type <- as.factor(int_data$county_type)
+  int_data <- spread(int_data, key = year, value = annual_mean) #change from long to wide format (each column = year, row = county)
+  int_data$avg_pm <- rowMeans(int_data[c(seq(5,23))], na.rm = TRUE) #extract mean PM2.5 concentration for each county by taking mean of rows across all years (columns)
+  int_data <- subset(int_data, select = c(County, county_type, avg_pm))#only select the county, county_type for IDing in the bar plot, and avg # of monitor value columns
+  int_data <- int_data %>% filter(avg_pm > 0) #drop rows (counties) with all NAs for all years (avg_pm = 0.0000)
+  return(int_data)}
+
+#FUNCTION to combine native/non-native PM2.5 annual averages
+combine_avgexp <- function(native, general, fxn){
+  native_exp <- fxn(native, 1)
+  general_exp <- fxn(general, 0)
+  full_exp <- rbind(native_exp, general_exp)
+  full_exp <- full_exp %>% group_by(County,county_type) %>%
+    dplyr::summarise(avg_pm_all = mean(avg_pm)) #summarizes concentration levels if multiple monitors in a county
+  avgexp_full <- inner_join(full_exp, covariates)  #join with covariates data
+  avgexp_full$county_type <- as.factor(avgexp_full$county_type) #convert binary indicator variable for AI/non-AI into factor
+  avgexp_full$State <- substr(avgexp_full$County, 0, 2)  #add column for state based on first two characters of county FIPS code
+  avgexp_full$State <- as.numeric(avgexp_full$State)  #need to recode State as numeric, for random effects
+  avgexp_full <- avgexp_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)  #filter out US territories, AL and HI
+  return(avgexp_full)} 
+
+#FUNCTION keep all exposure data, for each county year; drop any NAs
+exp_ctyear <- function(annual_data, native_status){
+  int_data <- do.call(rbind, annual_data) #create one long table with all years
+  int_data$county_type <- native_status
+  int_data$county_type <- as.factor(int_data$county_type)
+  int_data <- na.omit(int_data) #remove county-years with NAs
+  int_data$year <- as.factor(int_data$year)
+  int_data <- subset(int_data, select = c(County, county_type, annual_mean, year))  #only select the county, county_type for AI/non-AI indicator, and avg # of monitor value columns
+  return(int_data)
+}
+
+#FUNCTION to combine all county year exposure data
+combine_allexp <-function(native, general, fxn){
+  native_exp <- fxn(native, 1)
+  general_exp <- fxn(general, 0)
+  full_exp <- rbind(native_exp, general_exp)
+  full_exp <- full_exp %>% group_by(County,county_type, year) %>%
+    dplyr::summarise(annual_mean_all = mean(annual_mean)) #summarize exp if multiple monitors in county
+  annualexp_full <- inner_join(full_exp, covariates)  #join with covariates data
+  annualexp_full$county_type <- as.factor(annualexp_full$county_type)
+  annualexp_full$State <- substr(annualexp_full$County, 0, 2)   #add column for state based on first two characters of county FIPS code
+  annualexp_full$State <- as.numeric(annualexp_full$State)  #need to recode State as numeric, for random effects
+  annualexp_full <- annualexp_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)  #filter out territories, AL and HI
+  # Create extra columns for hhinc and popd quantiles
+  annualexp_full$popd_q <- cut(annualexp_full$pop_density, 
+                               quantile(annualexp_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+  annualexp_full$hhinc_q <- cut(annualexp_full$hh_income, 
+                            quantile(annualexp_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+  return(annualexp_full)
+}
+```
+
+###3.2.2 Compute Monitor Coverage (average monitor count across all years per county & monitor count per county per EACH year)
+
+####3.2.2.1 Define functions
+
+The first function averages the number of monitors across all counties for all study years. The second function aggregates monitor count data for each county for each separate study year.
+
+```{r}
+#Join datasets to make data table with average monitors, county, native/non-native "exposure", population density
+#Continuous dependent variable; Use this for t-test and linear mixed models
+#Function:
+avg_mon_full <- function(native, general){
+  native$county_type <- 1
+  general$county_type <- 0 #recode column with binary variables for model
+  PM25_avgmon <- rbind(native, general)
+  #join with covariates data
+  avgmon_full <- inner_join(PM25_avgmon, covariates)
+  avgmon_full$county_type <- as.factor(avgmon_full$county_type)
+  avgmon_full
+  #add column for state based on first two characters of county FIPS code
+  avgmon_full$State <- substr(avgmon_full$County, 0, 2)
+  #need to recode State as numeric, for random effects
+  avgmon_full$State <- as.numeric(avgmon_full$State)
+  avgmon_full <- avgmon_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)
+  avgmon_full <- avgmon_full %>%
+    mutate(mon_present = case_when(
+      avg_mon > 0 ~ 1,
+      avg_mon == 0 ~ 0))
+  # Create extra columns for hhinc and popd quantiles
+  avgmon_full$popd_q <- cut(avgmon_full$pop_density, 
+                               quantile(avgmon_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+  avgmon_full$hhinc_q <- cut(avgmon_full$hh_income, 
+                            quantile(avgmon_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+  return(avgmon_full)}
+```
+
+```{r}
+#Write function to aggregate count data across all years, also monitor present or not
+count_mon <- function(native, general){
+  native_count <- do.call(rbind, native)
+  #binary indicator
+  native_count$county_type <- 1
+  general_count <- do.call(rbind, general)
+  general_count$county_type <- 0
+  #combine native/non-native
+  count_all <- rbind(native_count,
+                        general_count)
+  #join with covariates data
+  count_all_full <- inner_join(count_all, covariates)
+  count_all_full$county_type <- as.factor(count_all_full$county_type)
+  
+  #add column for state based on first two characters of county FIPS code
+  count_all_full$State <- substr(count_all_full$County, 0, 2)
+  #need to recode State as numeric, for random effects
+  count_all_full$State <- as.numeric(count_all_full$State)
+  count_all_full <- count_all_full %>% filter(State <= 56,
+                                        State != 2,
+                                        State != 15)
+  count_all_full$year <- as.factor(count_all_full$year)
+  # Create extra columns for hhinc and popd quantiles
+  count_all_full$popd_q <- cut(count_all_full$pop_density, 
+                               quantile(count_all_full$pop_density, seq(0,1,0.1)), include.lowest = TRUE)
+  count_all_full$hhinc_q <- cut(count_all_full$hh_income, 
+                            quantile(count_all_full$hh_income, seq(0,1,0.1)), include.lowest = TRUE)
+  return(count_all_full)}
+```
+
+####3.2.1.2 Run functions on AI/non-AI populated counties (main analysis), and separately classification definitions (sensitivity analysis)
+```{r}
+# MAIN ANALYSIS
+  # ALL COUNTIES annual PM2.5 avgs
+all_avg_exp <- combine_avgexp(all_native_PM25, all_general_PM25, drop_all_NA)
+all_avg_exp
+  #ALL COUNTIES PM2.5 exposures, county year 
+all_ctyear_exp <- combine_allexp(all_native_PM25, all_general_PM25, exp_ctyear)
+
+# SENSITIVITY ANALYSIS
+  #CENSUS annual PM2.5 avgs
+census_avg_exp <- combine_avgexp(native_PM25_census, general_PM25$census, drop_all_NA)
+  #CLUSTER annual PM2.5 avgs
+cluster_avg_exp<- combine_avgexp(native_PM25, general_PM25$cluster, drop_all_NA)
+  #RESERVATION annual PM25 avgs 
+reservation_avg_exp <- combine_avgexp(reservation_PM25, general_PM25$reservations, drop_all_NA)
+
+  #CENSUS PM2.5 exposures county year 
+census_ctyear_exp <- combine_allexp(native_PM25_census, general_PM25$census, exp_ctyear)
+  #CLUSTERPM2.5 exposures county year 
+cluster_ctyear_exp <- combine_allexp(native_PM25, general_PM25$cluster, exp_ctyear)
+  #RESERVATION PM2.5 exposures county year
+reservation_ctyear_exp <- combine_allexp(reservation_PM25, general_PM25$reservations, exp_ctyear)
+
+# DFs of MEAN annual PM2.5 concentrations across all study years for each county with data
+all_avg_exp
+census_avg_exp
+cluster_avg_exp
+reservation_avg_exp
+
+# DFs of PM2.5 concentrations for each COUNTY-YEAR
+all_ctyear_exp
+census_ctyear_exp
+cluster_ctyear_exp
+reservation_ctyear_exp
+```
+
+####3.2.1.2 Run functions on AI/non-AI populated counties (main analysis), and separately classification definitions (sensitivity analysis)
+```{r}
+# MAIN ANALYSIS
+  #Average monitor count data
+all_avgmon_full <- avg_mon_full(native_PM25_monitors,
+                                general_PM25_monitors)
+
+  #Monitor count data for each county-year
+all_native_count_full <- count_mon(all_native_PM25, all_general_PM25)
+
+all_avgmon_full
+all_native_count_full
+
+# SENSITIVITY ANALYSIS
+  #1) Census Average Monitor Count
+census_avgmon_full <- avg_mon_full(native_PM25_census_monitors, 
+                              general_PM25_census_monitors)
+  # Census Monitor Count for each county-year
+census_count_full <- count_mon(native_PM25_census, general_PM25$census)
+
+  #2) Cluster Average Monitor Count
+cluster_avgmon_full <- avg_mon_full(native_PM25_cluster_monitors, 
+                               general_PM25_cluster_monitors)
+  #Cluster Monitor Count for each county-year
+cluster_count_full <- count_mon(native_PM25, general_PM25$cluster)
+
+  #3) Reservation Average Monitor Count
+reservation_avgmon_full <- avg_mon_full(reservation_PM25_monitors,
+                            general_PM25_reservations_monitors)
+  #Reservation Monitor Count for each county-year
+reservation_count_full <- count_mon(reservation_PM25, general_PM25$reservations)
+
+census_avgmon_full
+census_count_full
+
+cluster_avgmon_full
+cluster_count_full
+
+reservation_avgmon_full
+reservation_count_full
+```

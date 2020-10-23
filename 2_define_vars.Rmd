@@ -1,0 +1,448 @@
+---
+title: "Part 2: Defining Exposure, Covariates, Outcome"
+author: "Maggie Li (ml4424)"
+date: "8/6/2020"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(tidycensus)
+library(leaflet)
+library(rgdal)
+```
+
+#PART 2: ASSIGN EXPOSURE/COVARIATES/OUTCOME TO COUNTIES
+
+"Exposure" of interest = American Indian (AI) populated county (Y/N)
+Outcome = PM2.5 concentration (monitor), PM2.5 concentration (model), PM2.5 coverage (monitor)
+
+##2.1 Define AI Populated Counties using the 3 classification definitions
+###2.1.1 Define Rural Cluster (Wallace et al.) Counties, extract PM2.5 values for sensitivity analysis
+```{r}
+# Read in county data for rural clusters & extract PM2.5 data
+counties_cluster <- read.csv("Data/clustershare.csv")
+
+# subset to just rural AI counties
+native_rural_counties <- subset.data.frame(counties_cluster,
+                                           cluster.name =="Rural, American Indian")
+
+#need matching County column name with PM2.5 data 
+County <- formatC(native_rural_counties$FIPS, width = 5, format = "d", flag = "0")
+
+#add County column (updated FIPS code)
+native_rural_counties <- cbind(native_rural_counties,
+                               County)
+native_rural_counties
+#filter only to 48 states and DC
+native_rural_counties <- native_rural_counties %>% 
+  filter(!str_detect(County, "^02")) %>%
+  filter(!str_detect(County, "^15"))
+native_rural_counties
+```
+
+###2.1.2 Define Census >5% AI Counties
+```{r}
+#Read in and define native counties by census definition, extract PM2.5 concentrations
+#Select native american counties using tidycensus: cutoff with census data of native americans > 5% of county population
+census_api_key("ef9bc9f1392567620517b2f5ba86c86ebbd70d69", overwrite=TRUE, install = TRUE)
+readRenviron("~/.Renviron")
+
+#Total!!American Indian and Alaska Native alone = P003004; total population is P001001
+native_pop_var <- "P003004"
+total_pop <- "P001001"
+native_census <- get_decennial(geography = "county", 
+                               variables = native_pop_var, 
+                               year = 2010)
+native_census
+native_census$total_pop <- get_decennial(geography = "county",
+                                         variables = total_pop, 
+                                         year = 2010)$value
+colnames(native_census)[colnames(native_census)=="value"] <- "native_pop"
+native_census$native_prop <- native_census$native_pop/native_census$total_pop
+native_census
+
+#Find counties with >5% native population; there are 203 counties.
+native_census_counties <- subset.data.frame(native_census,
+                                   native_prop >= 0.05)
+native_census_counties <- subset(native_census_counties,
+                                 select = c("GEOID", "NAME","native_prop"))
+colnames(native_census_counties)[colnames(native_census_counties)=="GEOID"] <- "County"
+native_census_counties <- native_census_counties %>% 
+  filter(!str_detect(County, "^02")) %>%
+  filter(!str_detect(County, "^15"))
+native_census_counties
+```
+
+###2.1.3 Define Reservation Counties
+```{r}
+# Read in gdb of recognized reservations 
+# Source: https://edg.epa.gov/metadata/catalog/search/resource/details.page?uuid=%7B8077CD55-74FB-4107-8047-3DEC0D55966A%7D
+tribal.gdb <- "Data/Tribal_Boundaries_022117.gdb"
+tribal.gdb
+
+# List all feature classes in a file geodatabase
+fc_list <- ogrListLayers(tribal.gdb)
+print(fc_list)
+
+# Read the feature class
+tribal48 <- readOGR(dsn=tribal.gdb,layer="LOWER48_TRIBES")
+summary(tribal48)
+
+# Read out shapefile, to use in QGIS to find 20% overlap (commented out)
+# writeOGR(obj = tribal48, 
+#          dsn = "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/tribal48",
+#          layer = "tribal48", driver = "ESRI Shapefile")
+
+# Do some magic in QGIS: I imported the tribal48 shapefile and the county shapefile, used the overlap function to join the layers (input layer = counties), which spits out a temporary layer showing the percent overlap of reservations in each county, for each county in the attribute table (I believe the column is called overlap_pc. I went into the properties of this layer, filtered out those with overlap_pc >= 20%, and exported this as a shapefile. I then read this in below:
+
+# Read in cleaned counties with >= 20% area covered by reservation lands 
+
+reservation_counties <- rgdal::readOGR("Data/tribal48/tribal20_counties.shp")
+typeof(reservation_counties$GEOID)
+
+# visualize these counties in a simple map
+overlap_counties <- leaflet() %>%
+addProviderTiles(providers$CartoDB.Positron) %>%
+  addPolygons(data = reservation_counties, color = "#3DACF0")
+overlap_counties 
+
+# convert reservation counties spdf to dataframe
+reservation_counties <- as.data.frame(reservation_counties)
+reservation_counties <- reservation_counties %>% dplyr::select(GEOID) %>% dplyr::rename(County = GEOID)
+reservation_counties
+```
+
+## 2.2 Define potential covariates of interest (Rural/Urban Classification, Population Density, Climate Zone, Median HH Income)
+```{r}
+# Rural/Urban Classification: downloaded from CDC NCHS https://www.cdc.gov/nchs/data_access/urban_rural.htm
+# Key: 1 = large central metro; 2 = large fringe metro; 3 = medium metro; 4 = small metro; 5 = micropolitan (population of at least 10,000 but less than 50,000); 6 = non-core
+# Basically 1-3 is urban, 4-6 is suburban/rural
+
+urban_rural_counties_2013 <- read.csv("Data/urban_rural_counties_2013.csv")
+#add leading 0; first make column vector
+County <- formatC(urban_rural_counties_2013$FIPS.code, width = 5, format = "d", flag = "0")
+#append new County column vector
+urban_rural_counties_2013$County <- County
+urban_rural_counties_2013 <- urban_rural_counties_2013 %>%
+  dplyr::select(c(County, X2013.code)) %>% dplyr::rename(land_use = X2013.code)
+urban_rural_counties_2013$County <- as.factor(urban_rural_counties_2013$County)
+urban_rural_counties_2013$land_use <- as.factor(urban_rural_counties_2013$land_use)
+
+# Population Density Data; downloaded from US Census 
+census_pop_density <- read.csv("Data/census_2010_pop_density.csv")
+head(census_pop_density)
+
+#keep columns GCT_STUB.target.geo.id2, HD01, SUBHD0401, SUBHD0402 (population and housing density)
+census_pop_density <- census_pop_density %>% subset(select = c(GCT_STUB.target.geo.id2,
+                                                               HD01,
+                                                               SUBHD0401, 
+                                                               SUBHD0402))
+#delete first three rows
+census_pop_density <- census_pop_density[-c(1,2,3),]
+census_pop_density <- census_pop_density %>% 
+  dplyr::rename(County = GCT_STUB.target.geo.id2) %>%
+  dplyr::rename(total_pop = HD01) %>%
+  dplyr::rename(pop_density = SUBHD0401) %>%
+  dplyr::rename(housing_density = SUBHD0402)
+
+census_pop_density$County <- as.numeric(as.character(census_pop_density$County))
+census_pop_density <- census_pop_density %>%
+  filter(County <= 56045) %>% 
+  filter(County > 1000)  #filter out territories
+census_pop_density 
+# clean county column by adding leading zero
+county_cleaned <- formatC(census_pop_density$County, width = 5, format = "d", flag = "0")
+
+census_pop_density <- cbind(census_pop_density, county_cleaned) %>%
+  dplyr::select(-County)
+
+census_pop_density$county_cleaned<- as.factor(census_pop_density$county_cleaned) 
+census_pop_density <- census_pop_density%>%dplyr::rename(County = county_cleaned)
+
+census_pop_density
+
+# Median HH Income from 2010 ACS
+hh_income <- "B19013_001"
+hh_income_census <- get_acs(geography = "county",
+                          variables = hh_income,
+                          year = 2010)
+hh_income_census <- hh_income_census %>%
+  dplyr::select(c(GEOID, estimate)) %>%
+  dplyr::rename(hh_income = estimate) %>%
+  dplyr::rename(County = GEOID)
+hh_income_census
+
+#Climate Zone data source: https://www.ncdc.noaa.gov/monitoring-references/maps/us-climate-regions.php?hc_location=ufi
+
+climatezonefips <- read.csv("Data/climatezonefips.csv")
+climatezonefips
+climatezonefips$FIPS <- as.numeric(climatezonefips$FIPS)
+climatezonefips <- subset(climatezonefips,
+                          select = c(Climate_Zone, FIPS))
+climatezonefips <- dplyr::rename(climatezonefips,
+                          State = FIPS)
+climatezonefips
+
+#EPA Regions : https://www.epa.gov/aboutepa/visiting-regional-office
+
+eparegions <- read.csv("Data/eparegions.csv")
+eparegions <- eparegions %>%
+  dplyr::select(EPA_region, FIPS) %>%
+  dplyr::rename(State = FIPS)
+eparegions$EPA_region <- as.factor(eparegions$EPA_region)
+eparegions$State <- as.numeric(eparegions$State)
+eparegions
+
+# Join altogether
+covariates <- inner_join(census_pop_density,hh_income_census) %>%
+  inner_join(urban_rural_counties_2013)
+covariates
+covariates$State <- substr(covariates$County, 0, 2)
+covariates$State <- as.numeric(covariates$State)
+covariates$pop_density <- as.numeric(as.character(covariates$pop_density))
+covariates$housing_density <- as.numeric(as.character(covariates$housing_density))
+covariates
+covariates <- inner_join(covariates, eparegions)
+covariates
+native_census <- native_census %>% 
+  dplyr::rename(County = GEOID) %>%
+  dplyr::select(County, native_prop)
+covariates <- covariates %>% inner_join(native_census)
+covariates
+```
+
+
+##2.3 MAIN ANALYSIS: Define all AI/Non-AI populated counties, extract monitor/model PM2.5 concentrations & monitor coverage
+
+After defining different AI classifications above, we collect all the counties that fit in at least one of those definitions and create a master list of predominantly AI-populated counties. We use anti-join to create a list of all non-AI populated counties.
+####2.3.1 First define counties:
+```{r}
+# separate AI definitions from above
+# native_rural_counties
+# native_census_counties
+# reservation_counties
+
+# Select common county column from all three classification definitions and join into single df
+census <- native_census_counties %>% dplyr::select(County)
+reservation <- reservation_counties %>% dplyr::select(County)
+cluster <- native_rural_counties %>% dplyr::select(County)
+
+all_native_counties <- rbind(census, reservation, cluster)
+
+# only keep unique values, because classification definitions overlap
+all_native_counties <- unique(all_native_counties) 
+
+# Get list of all US counties from census
+all_counties <- get_decennial(geography = "county", 
+                               variables = total_pop, 
+                               year = 2010)
+all_counties$State <- substr(all_counties$GEOID, 0, 2)
+all_counties$State <- as.numeric(all_counties$State)
+all_counties <- all_counties %>%
+  filter(State <= 56,
+         State != 2,
+         State != 15) #filter out HI, AL, US territories
+
+# County list of all non-native counties
+all_counties_list <- all_counties %>% dplyr::select(GEOID) %>% 
+  dplyr::rename(County = GEOID) #cleaned all_counties df to use in anti_join
+all_general_counties <- anti_join(x = all_counties_list,
+                                  y = all_native_counties,
+                                  by= "County") %>% 
+  filter(!str_detect(County, "^02"),
+         !str_detect(County, "^15")) 
+
+all_native_counties$county_type <- 1
+all_general_counties$county_type <- 0
+main_analysis_counties <- rbind(all_native_counties, all_general_counties)
+main_analysis_counties
+```
+
+####2.3.2 Function to assign monitor PM2.5 values for county
+```{r}
+PM25_extract <- function(PM25_data, county, output_list){
+  yr <- 2000
+  for (year in 1:19){
+    output_list[[year]] <- merge(county,
+                                 PM25_data[[year]],
+                                 by = "County", 
+                                 all.x = TRUE) # Merge tables, Aggregate values if there are two monitors per county
+    output_list[[year]]$num_mon <- ifelse(output_list[[year]]$annual_mean>=0,
+                                          yes = 1, no = 0) %>% replace_na(replace = 0) #only NAs have 0 bc num_mon is binary variable (y/n)
+    output_list[[year]] <- subset(output_list[[year]],
+                                  select = (c(County, annual_mean, num_mon))) 
+    output_list[[year]] <- aggregate(.~ County,
+                                     data = output_list[[year]],
+                                     FUN = sum,
+                                     na.action = NULL) #sum of all monitor concentrations in county
+    output_list[[year]]$annual_mean <- output_list[[year]]$annual_mean/output_list[[year]]$num_mon #divide sum by number of monitors for county avg
+    output_list[[year]]$mon_present <- ifelse(output_list[[year]]$num_mon>0,
+                                              yes = 1, no = 0)
+    output_list[[year]]$year <- yr
+    yr = yr + 1
+  }
+  return(output_list)
+}
+```
+
+####2.3.3 Extract monitor PM2.5 concentrations and coverage:
+```{r}
+# Extract PM2.5 county monitor concentrations
+all_native_PM25 <- list()
+all_native_PM25 <- PM25_extract(PM25_all,
+                                 all_native_counties,
+                                 all_native_PM25) 
+# Join all non-native counties with PM2.5 data
+all_general_PM25 <- list()
+all_general_PM25 <- PM25_extract(PM25_all,
+                                 all_general_counties,
+                                 all_general_PM25)
+all_general_PM25
+```
+
+####2.3.4 Extract model PM2.5 concentrations:
+```{r}
+# extract values for main analysis AI counties
+model_PM25 <- do.call(rbind, model_PM25)
+model_PM25 <- model_PM25 %>% dplyr::rename(County=FIPS)
+model_PM25$State <- as.numeric(model_PM25$State)
+model_PM25 <- inner_join(model_PM25, covariates)
+model_PM25 <- model_PM25 %>% inner_join(main_analysis_counties)
+
+```
+
+
+###2.4 SENSITIVITY ANALYSIS: Assign monitor PM2.5 concentrations for different AI classifications separately
+####2.4.1 Extract monitor PM2.5 concentrations for AI=populated counties: rural cluster, census, reservation counties
+```{r}
+# rural cluster
+native_PM25 <- list()
+native_PM25 <- PM25_extract(PM25_all,
+                            native_rural_counties,
+                            native_PM25)
+
+# census
+native_PM25_census <- list()
+native_PM25_census <- PM25_extract(PM25_all,
+                         native_census_counties,
+                         native_PM25_census)
+native_PM25_census
+
+# reservation
+reservation_PM25 <- list()
+reservation_PM25 <- PM25_extract(PM25_all,
+                         reservation_counties,
+                         reservation_PM25)
+reservation_PM25
+```
+
+####2.4.1 Extract monitor PM2.5 concentrations for non-AI populated counties, for diff classification groups separately
+#####first, define these non-AI counties
+```{r}
+# Define non-native counties based on reverse joining native counties with all counties
+# Find all non-native census counties (by 5% threshold), all non-native cluster counties, all reservation counties; rename columns to be the same name
+
+# standardize all dfs with single column "county"
+native_census_counties_list <- native_census_counties %>% dplyr::select(County)
+native_rural_counties_list <- native_rural_counties %>% dplyr::select(County)
+reservation_counties <- reservation_counties #don't need to adjust, already in correct form
+
+#get all counties that are not in these native county groups (complement)
+general_counties_census <- anti_join(x = all_counties_list,
+                                     y = native_census_counties,
+                                     by= "County")
+general_counties_cluster <- anti_join(all_counties_list,
+                                     native_rural_counties_list,
+                                     by = "County")
+general_counties_reservations <- anti_join(x = all_counties_list,
+                                           y = reservation_counties,
+                                           by= "County")
+```
+
+#####now, run function to extract PM2.5 concentrations for non-native counties of all 3 classification
+```{r}
+#join the general counties lists with PM2.5 and PM2.5 components datasets.
+#first make a list of all 3 county data frames to do a nested for loop with
+general_counties <- list(general_counties_cluster,
+                         general_counties_census,
+                         general_counties_reservations)
+#empty list of lists to store PM2.5 data across all years for different county datasets
+general_PM25 <- list(cluster=list(),
+                     census = list(),
+                     reservations = list())
+
+for (county in 1:length(general_counties)){
+  yr <- 2000
+  for (year in 1:19){
+    general_PM25[[county]][[year]] <- merge(general_counties[[county]],
+                               PM25_all[[year]],
+                               by = "County", 
+                               all.x = TRUE)
+    general_PM25[[county]][[year]]$num_mon <- ifelse(general_PM25[[county]][[year]]$annual_mean>=0,
+                                        yes = 1, no = 0) %>% replace_na(replace = 0)
+    general_PM25[[county]][[year]] <- subset(general_PM25[[county]][[year]],
+                                select = (c(County, annual_mean, num_mon)))
+    general_PM25[[county]][[year]] <- aggregate(.~ County,
+                                   data = general_PM25[[county]][[year]],
+                                   FUN = sum,
+                                   na.action = NULL)
+    general_PM25[[county]][[year]]$annual_mean <- general_PM25[[county]][[year]]$annual_mean/general_PM25[[county]][[year]]$num_mon
+    general_PM25[[county]][[year]]$mon_present <- ifelse(general_PM25[[county]][[year]]$num_mon>0,
+                                            yes = 1, no = 0)
+    general_PM25[[county]][[year]]$year <- yr
+    yr = yr + 1
+    }
+}
+length(general_PM25$reservation) #list of lists; should be 57 df total (3 classifications, 19 years each)
+```
+
+###2.5 SENSITIVITY ANALYSIS: Show overlap of AI county definitions (data visualized in venn diagram in paper to double check with)
+```{r}
+# Non-restricted for each definition (main analysis)
+census_counties <- native_census_counties %>% 
+  dplyr::select(County) 
+cluster_counties <- native_rural_counties %>% 
+  dplyr::select(County) 
+reservation_counties <- reservation_counties %>%
+  dplyr::select(County)
+
+#three-way overlap
+all_overlap <- cluster_counties %>% 
+  inner_join(census_counties) %>% 
+  inner_join(reservation_counties)
+nrow(all_overlap) #number of counties that fit all three definitions
+
+#two-way overlap
+cluster_census <- cluster_counties %>% 
+  inner_join(census_counties) %>% anti_join(all_overlap)
+nrow(cluster_census)
+
+cluster_reservation <- cluster_counties %>%
+  inner_join(reservation_counties) %>% anti_join(all_overlap)
+nrow(cluster_reservation)
+
+census_reservation <- census_counties %>%
+  inner_join(reservation_counties) %>% anti_join(all_overlap)
+nrow(census_reservation)
+
+#exclusive to each definition
+census_only <- census_counties %>%
+  anti_join(census_reservation) %>%
+  anti_join(cluster_census) %>%
+  anti_join(all_overlap)
+nrow(census_only)
+
+cluster_only <- cluster_counties %>%
+  anti_join(cluster_census) %>%
+  anti_join(cluster_reservation) %>%
+  anti_join(all_overlap)
+nrow(cluster_only)
+
+reservation_only <- reservation_counties %>%
+  anti_join(cluster_reservation) %>%
+  anti_join(census_reservation) %>%
+  anti_join(all_overlap)
+nrow(reservation_only)
+```
+

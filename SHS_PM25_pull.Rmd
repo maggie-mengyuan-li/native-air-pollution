@@ -1,0 +1,58 @@
+---
+title: "SHS_PM25_pull"
+author: "Maggie Li (ml4424)"
+date: "10/9/2020"
+output: html_document
+---
+
+##Pulling daily and hourly mean PM2.5 csv file for Rapid City, 2010 for Markus
+
+```{r daily}
+## read in 2010 daily data
+daily_conc_2010 <- read_csv("Data/daily_88101_2010.csv") %>% 
+  janitor::clean_names() %>%
+  unite("fips", sep = "", c(state_code, county_code), remove = F)
+
+## select rapid cities, poc = 1 to avoid double counting
+rapid_city_pm <- daily_conc_2010 %>% 
+  filter(fips == "46103",
+         poc == 1)
+
+## select key variables and save out as csv to send to Markus
+rapid_city_pm <- rapid_city_pm %>% 
+  dplyr::select(site_num, date_local, arithmetic_mean) %>% 
+  group_by(date_local) %>% #get daily mean based on the two monitors
+  summarize(daily_mean = mean(arithmetic_mean))
+
+# write_csv(rapid_city_pm, "Data/rapid_city_daily_pm")
+
+mean(rapid_city_pm$daily_mean)
+sd(rapid_city_pm$daily_mean)
+```
+
+
+```{r hourly}
+## read in hourly 2010 data
+hourly_conc_2010 <- read_csv("Data/hourly_88101_2010.csv") %>% 
+  janitor::clean_names() %>%
+  unite("fips", sep = "", c(state_code, county_code), remove = F)
+hourly_conc_2010
+
+## select rapid cities, note: poc = 3 for all entries
+rapid_city_hourly <- hourly_conc_2010 %>% 
+  filter(fips == "46103")
+
+rapid_city_hourly
+
+## select key variables and save out as csv to send to Markus
+rapid_city_hourly <- rapid_city_hourly %>% 
+  dplyr::select(site_num, date_local, time_local, sample_measurement) %>% 
+  group_by(time_local, date_local) %>% #get daily mean based on the two monitors
+  summarize(hourly_mean = mean(sample_measurement))
+
+# write_csv(rapid_city_hourly, "Data/rapid_city_hourly_pm")
+mean(rapid_city_hourly$hourly_mean)
+sd(rapid_city_hourly$hourly_mean)
+
+```
+
