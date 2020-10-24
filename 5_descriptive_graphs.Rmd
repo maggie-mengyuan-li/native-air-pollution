@@ -12,6 +12,7 @@ library(grid)
 library(ggplot2)
 library(lattice)
 library(lme4)
+library(gamm4)
 ```
 
 
@@ -108,6 +109,7 @@ nai_monitor_adj <- monitor_adj %>%
 
 ai_monitor_adj
 nai_monitor_adj
+
 ```
 
 ```{r Get unadjusted mean PM2.5 for AI counties & Plot all adj and unadj values}
@@ -423,7 +425,6 @@ ggsave("figures/updated_10.22/monitor_combined.png")
 #     ggtitle("Combine plot of BV cumulative counts")+
 #     theme_bw()
 ```
-
 
 ### Model Data
 ```{r Create Dataframe of annual mean PM2.5 adjusted in all counties}
@@ -757,4 +758,26 @@ model_combined + annotation_custom(grob_model_combined)
 
 ggsave("figures/updated_10.22/model_combined.png")
 ```
+### Calulate average decline across study period (monitor and model) -- reported in results
+```{r}
+ai_monitor_adj
+nai_monitor_adj
+
+ai_model_adj
+nai_model_adj
+
+## average decline AI monitor
+ai_monitor_adj$annual_mean_all %>% first() - ai_monitor_adj$annual_mean_all %>% last()
+
+## average decline non-AI monitor
+nai_monitor_adj$annual_mean_all %>% first() - nai_monitor_adj$annual_mean_all %>% last()
+
+## average decline AI model
+ai_model_adj$annual_mean_all %>% first() - ai_model_adj$annual_mean_all %>% last()
+
+## average decline in non-AI model
+nai_model_adj$annual_mean_all %>% first() - nai_model_adj$annual_mean_all %>% last()
+
+```
+
 

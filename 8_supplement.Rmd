@@ -7,6 +7,7 @@ output: html_document
 
 ```{r}
 library(xtable)
+library(tidyverse)
 ```
 
 
@@ -119,7 +120,7 @@ rural_generalPM25 <- inner_join(generalPM25_df, covariates, by = "County") %>%
   subset(as.numeric(as.character(land_use)) >= 4)
 ```
 
-###2.1.2 Create data tables to make bar graphs
+###2.1.2 Create data tables & make bar graphs
 ```{r}
 ruralnative_PM25_monitors <- avg_mon_sens(rural_nativePM25, "AI-Populated County")
 ruralnative_PM25_freq <- mon_freq(ruralnative_PM25_monitors, "AI-Populated County")
@@ -139,16 +140,20 @@ rural_PM25_plot <- ggplot(rural_PM25_tbl,
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
   theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12)) +
-  labs(title = expression(paste("Rural ", PM[2.5], " Monitor Distribution, 2000-2018")),
+  labs(#title = expression(paste("Rural ", PM[2.5], " Monitor Distribution, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
-       fill = "County Type") 
-rural_PM25_plot 
+       fill = "County Type") +
+  scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
+
 rural_PM25_tbl
+rural_PM25_plot 
+# ggsave("figures/supplement/rural_monitor_bar.png")
+
 ```
 
 ##2.2 Non-NE Counties (Main Analysis subset)
@@ -181,16 +186,19 @@ non_ne_PM25_plot <- ggplot(non_ne_PM25_tbl,
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
   theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12)) +
-  labs(title = expression(paste("Non-NE ", PM[2.5], " Monitor Distribution, 2000-2018")),
+  labs(#title = expression(paste("Non-NE ", PM[2.5], " Monitor Distribution, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
-       fill = "County Type") 
-non_ne_PM25_plot 
+       fill = "County Type") +
+  scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
+
 non_ne_PM25_tbl
+non_ne_PM25_plot 
+ggsave("figures/supplement/non_ne_monitor_bar.png")
 ```
 
 ##2.3 Main Analysis Counties + counties with any federally-recognized tribal reservations
@@ -215,7 +223,7 @@ tribal_sensitivity$County <- as.character(tribal_sensitivity$County)
 # need to recode FIPS 46102 to 46113 (Shannon County, SD was renamed Oglala Lakota County in 2015) for consistency with other data
 
 tribal_sensitivity$County <- gsub("46102", "46113", tribal_sensitivity$County)
-view(tribal_sensitivity)
+
 ```
 
 ###2.3.2 Create new dataset of all native counties
@@ -244,7 +252,7 @@ all_native_counties_sens$county_type <- 1
 all_general_counties_sens$county_type <- 0
 main_analysis_counties_sens <- rbind(all_native_counties_sens, all_general_counties_sens)
 main_analysis_counties_sens %>% subset(county_type == "1")
-view(main_analysis_counties_sens)
+
 ```
 
 ###2.3.3 Extract monitor PM2.5 concentrations and coverage:
@@ -285,16 +293,19 @@ all_PM25_plot_sens <- ggplot(all_PM25_tbl_sens,
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
   theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018 (Any Tribal Lands)")),
+  labs(#title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018 (Any Tribal Lands)")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
-       fill = "County Type") 
-all_PM25_plot_sens 
+       fill = "County Type") +
+  scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
+
 all_PM25_tbl_sens
+all_PM25_plot_sens 
+ggsave("figures/supplement/any_tribal_monitor_bar.png")
 ```
 
 
@@ -306,7 +317,7 @@ all_PM25_tbl_sens
 native_PM25_census_monitors <- avg_mon(native_PM25_census, "AI-Populated County")
 native_PM25_census_freq <- mon_freq(native_PM25_census_monitors, "AI-Populated County")
 general_PM25_census_monitors <- avg_mon(general_PM25$census, "Non-AI County")
-general_PM25_census_freq <- mon_freq(general_PM25_census_monitors, "Non-AI County")
+general_PM25_census_freq <- mon_freq(general_PM25_census_monitors, "Non-AI Populated County")
 census_PM25_tbl <- combine_freq(native_PM25_census_freq, general_PM25_census_freq)
 census_PM25_tbl 
 native_PM25_census_freq
@@ -325,15 +336,17 @@ census_PM25_plot <- ggplot(census_PM25_tbl,
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
   theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution \n in AI vs Non-AI Populated Census Counties, 2000-2018")),
+  labs(#title = expression(paste(PM[2.5], " Monitor Distribution \n in AI vs Non-AI Populated Census Counties, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
-       fill = "County Type") 
+       fill = "County Type") +
+  scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
 census_PM25_plot 
+ggsave("figures/supplement/census_monitor_bar.png")
 ```
 
 ##2.5 AI populated counties (rural cluster definition only)
@@ -376,15 +389,17 @@ cluster_PM25_plot <- ggplot(cluster_PM25_tbl,
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
   theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution in Rural Clustered Counties, 2000-2018")),
+  labs(#title = expression(paste(PM[2.5], " Monitor Distribution in Rural Clustered Counties, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
-       fill = "County Type")
+       fill = "County Type") +
+  scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
 cluster_PM25_plot
+ggsave("figures/supplement/cluster_monitor_bar.png")
 ```
 
 ##2.6 AI populated counties (20% areal overlap with reservations definition only)
@@ -394,8 +409,8 @@ cluster_PM25_plot
 reservation_PM25_monitors <- avg_mon(reservation_PM25, "AI-Populated County")
 reservation_PM25_freq <- mon_freq(reservation_PM25_monitors, "AI-Populated County")
 
-general_PM25_reservations_monitors <-avg_mon(general_PM25$reservations, "General County")
-general_reservation_PM25_freq <- mon_freq(general_PM25_reservations_monitors,"General County")
+general_PM25_reservations_monitors <-avg_mon(general_PM25$reservations, "Non-AI Populated County")
+general_reservation_PM25_freq <- mon_freq(general_PM25_reservations_monitors,"Non-AI Populated County")
 
 reservation_PM25_tbl <- combine_freq(reservation_PM25_freq,
                                      general_reservation_PM25_freq)
@@ -408,77 +423,82 @@ reservation_PM25_plot <- ggplot(reservation_PM25_tbl,
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
   theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
+        axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
         legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution (Reservations), 2000-2018")),
+  labs(#title = expression(paste(PM[2.5], " Monitor Distribution (Reservations), 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
-       fill = "County Type")
+       fill = "County Type") +
+  scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
 sum(reservation_PM25_freq$prop)
 sum(general_reservation_PM25_freq$prop)
 reservation_PM25_plot
+ggsave("figures/supplement/reservation_monitor_bar.png")
+
 reservation_PM25_tbl
 ```
 
 ##2.7 AI populated counties (ANY areal overlap with reservations definition only)
+### UPDATE: NOT DOING THIS ONE ANYMORE ###
 
 ###2.7.1 Monitor coverage bar plot
 ```{r}
-# pull out just the column of counties from sensitivity analysis dataset
-tribal_sensitivity
-tribal_sensitivity_counties <- tribal_sensitivity %>% dplyr::select("County")
-
-# join tribal sensitivity analysis dataset with PM25 data first
-tribal_sensitivity_PM25 <- list()
-tribal_sensitivity_PM25 <- PM25_extract(PM25_all,
-                         tribal_sensitivity_counties,
-                         tribal_sensitivity_PM25)
-tribal_sensitivity_PM25
-
-# df of all non-AI counties
-general_tribal_sensitivity <- anti_join(x = all_counties_list,
-                                           y = tribal_sensitivity_counties,
-                                           by= "County")
-
-# join non-tribal sensitivity analysis dataset with PM25 data
-general_sensitivity_PM25 <- list()
-general_sensitivity_PM25 <- PM25_extract(PM25_all,
-                         general_tribal_sensitivity,
-                         general_sensitivity_PM25)
-general_sensitivity_PM25
-
-# make barplot
-reservation_PM25_monitors_sens <- avg_mon(tribal_sensitivity_PM25, "AI-Populated County")
-reservation_PM25_freq_sens <- mon_freq(reservation_PM25_monitors_sens, "AI-Populated County")
-
-general_PM25_reservations_monitors_sens <-avg_mon(general_sensitivity_PM25, "General County")
-general_reservation_PM25_freq_sens <- mon_freq(general_PM25_reservations_monitors_sens,"General County")
-
-reservation_PM25_tbl_sens <- combine_freq(reservation_PM25_freq_sens,
-                                     general_reservation_PM25_freq_sens)
-reservation_PM25_plot_sens <- ggplot(reservation_PM25_tbl_sens, 
-                            aes(x=lvl_bins, 
-                                y = total_prop,
-                                fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
-  geom_bar(stat="identity", position = "dodge") +
-  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
-  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
-  theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution (Counties with any reservations only)")),
-       x = "Average number of monitors per year by county type",
-       y = "Percent of Total Counties",
-       fill = "County Type")
-sum(reservation_PM25_freq$prop)
-sum(general_reservation_PM25_freq$prop)
-reservation_PM25_plot_sens
-reservation_PM25_tbl_sens
+# # pull out just the column of counties from sensitivity analysis dataset
+# tribal_sensitivity
+# tribal_sensitivity_counties <- tribal_sensitivity %>% dplyr::select("County")
+# 
+# # join tribal sensitivity analysis dataset with PM25 data first
+# tribal_sensitivity_PM25 <- list()
+# tribal_sensitivity_PM25 <- PM25_extract(PM25_all,
+#                          tribal_sensitivity_counties,
+#                          tribal_sensitivity_PM25)
+# tribal_sensitivity_PM25
+# 
+# # df of all non-AI counties
+# general_tribal_sensitivity <- anti_join(x = all_counties_list,
+#                                            y = tribal_sensitivity_counties,
+#                                            by= "County")
+# 
+# # join non-tribal sensitivity analysis dataset with PM25 data
+# general_sensitivity_PM25 <- list()
+# general_sensitivity_PM25 <- PM25_extract(PM25_all,
+#                          general_tribal_sensitivity,
+#                          general_sensitivity_PM25)
+# general_sensitivity_PM25
+# 
+# # make barplot
+# reservation_PM25_monitors_sens <- avg_mon(tribal_sensitivity_PM25, "AI-Populated County")
+# reservation_PM25_freq_sens <- mon_freq(reservation_PM25_monitors_sens, "AI-Populated County")
+# 
+# general_PM25_reservations_monitors_sens <-avg_mon(general_sensitivity_PM25, "General County")
+# general_reservation_PM25_freq_sens <- mon_freq(general_PM25_reservations_monitors_sens,"General County")
+# 
+# reservation_PM25_tbl_sens <- combine_freq(reservation_PM25_freq_sens,
+#                                      general_reservation_PM25_freq_sens)
+# reservation_PM25_plot_sens <- ggplot(reservation_PM25_tbl_sens, 
+#                             aes(x=lvl_bins, 
+#                                 y = total_prop,
+#                                 fill=county_type)) + 
+#   theme_linedraw() + #define df cols for x and y axis, select minimal theme
+#   geom_bar(stat="identity", position = "dodge") +
+#   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+#   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+#   theme(plot.title = element_text(size = 20),
+#         axis.title = element_text(size = 14),
+#         axis.text = element_text(size = 12),
+#         legend.title = element_text(size = 14),
+#         legend.text = element_text(size = 12)) +
+#   labs(title = expression(paste(PM[2.5], " Monitor Distribution (Counties with any reservations only)")),
+#        x = "Average number of monitors per year by county type",
+#        y = "Percent of Total Counties",
+#        fill = "County Type") +
+#   scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
+# sum(reservation_PM25_freq$prop)
+# sum(general_reservation_PM25_freq$prop)
+# reservation_PM25_plot_sens
+# reservation_PM25_tbl_sens
 ```
 
 
