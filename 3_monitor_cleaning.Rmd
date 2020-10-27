@@ -53,6 +53,7 @@ combine_freq <- function(native_freq, general_freq){
 
 ### 3.1.2 MAIN ANALYSIS: Monitor coverage for all AI/non-AI counties
 ```{r}
+
 native_PM25_monitors <- avg_mon(all_native_PM25, "AI-Populated County")
 native_PM25_monitors
 native_PM25_freq <- mon_freq(native_PM25_monitors, "AI-Populated County")
@@ -101,6 +102,8 @@ ggplot(all_PM25_tbl, aes(x=lvl_bins, y = total_prop, fill=county_type)) +
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties") +
   scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
+
+ggsave("figures/updated_10.22/recolored_monitors.png")
 ```
 
 #### 3.1.2.1 MAIN ANALYSIS: Chi-Squared test to compare monitor distributions

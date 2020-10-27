@@ -255,6 +255,11 @@ all_general_counties <- anti_join(x = all_counties_list,
 
 all_native_counties$county_type <- 1
 all_general_counties$county_type <- 0
+
+# need to filter out FIPS 46102, because it is a repeat of FIPS 46113 (Shannon County, SD was renamed Oglala Lakota County in 2015) 
+all_native_counties <- all_native_counties %>% 
+  filter(!County == "46102")
+
 main_analysis_counties <- rbind(all_native_counties, all_general_counties)
 main_analysis_counties
 ```

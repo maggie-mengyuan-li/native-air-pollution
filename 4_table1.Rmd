@@ -8,6 +8,7 @@ output: html_document
 ```{r}
 library(tidyverse)
 library(xtable)
+require(data.table) #need to convert for latex export
 ```
 
 ## Table 1: Descriptive Statistics by County for all counties, all counties with monitors, rural counties, rural counties with monitors (AI/Non-AI)
@@ -167,7 +168,7 @@ row.names(table_1_main) <- c("Number of Counties",
                         "Mean Model PM2.5 Concentrations",
                         "Population Density",
                         "HH Income")
-require(data.table) #need to convert for latex export
+
 test <- setDT(table_1_main)
 main_table1 <- xtable(test)
 main_table1
@@ -192,17 +193,22 @@ main_table_sd
 ### Rural Counties
 Note: I use the same variable names as above in intermediate steps for calculating each of the characteristics (overwriting values), so please run each chunk in their entirety to ensure the output tables
 
+**Definition of Rural Counties:** Micropolitan and Non-Core
+Source: https://www.hrsa.gov/rural-health/about-us/definition/index.html#:~:text=All%20counties%20that%20are%20not,as%20either%20Metro%20or%20Micro
+
+"Micropolitan counties are considered non-Metropolitan or rural along with all counties that are not classified as either Metro or Micro. "
+
 ```{r}
 # Table 1.2: Second table has columns for rural counties and rural counties with monitors
-rural_native <- all_native_counties_full %>% filter(as.numeric(land_use) >= 4)
-rural_general <- all_general_counties_full %>% filter(as.numeric(land_use) >= 4)
+rural_native <- all_native_counties_full %>% filter(as.numeric(land_use) >= 5)
+rural_general <- all_general_counties_full %>% filter(as.numeric(land_use) >= 5)
 
 #Number of counties
 num_counties_row_main <- data.frame(nrow(rural_native),
                                     nrow(rural_general),
-                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 4,
+                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 5,
                                                                 county_type==1)),
-                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 4,
+                                    nrow(all_avg_exp %>% filter(as.numeric(land_use) >= 5,
                                                                 county_type==0)))
 names(num_counties_row_main) <- c("Rural AI-Populated County", 
                                   "Rural Non-AI-Populated County",
@@ -210,8 +216,8 @@ names(num_counties_row_main) <- c("Rural AI-Populated County",
                                   "Rural Non-AI-Populated County with monitors")
 
 # Rural counties: Mean monitor count & SD
-rural_native_avgmon <- native_avgmon_full %>% filter(as.numeric(land_use) >= 4)
-rural_general_avgmon <- general_avgmon_full %>% filter(as.numeric(land_use) >= 4)
+rural_native_avgmon <- native_avgmon_full %>% filter(as.numeric(land_use) >= 5)
+rural_general_avgmon <- general_avgmon_full %>% filter(as.numeric(land_use) >= 5)
 rural_native_monitors_avgmon <- rural_native_avgmon %>% filter(county_type == 1,
                                                            avg_mon > 0) 
 rural_general_monitors_avgmon <- rural_general_avgmon %>% filter(county_type == 0,
@@ -229,8 +235,8 @@ sd_mon_row_main <- data.frame(sd(rural_native_avgmon$avg_mon),
 names(sd_mon_row_main) <- names(num_counties_row_main)
 
 # Rural counties: monitor mean concentrations & SD
-rural_native_avgexp <- native_avg_exp %>% filter(as.numeric(land_use) >= 4)
-rural_general_avgexp <- general_avg_exp %>% filter(as.numeric(land_use) >= 4)
+rural_native_avgexp <- native_avg_exp %>% filter(as.numeric(land_use) >= 5)
+rural_general_avgexp <- general_avg_exp %>% filter(as.numeric(land_use) >= 5)
 
 # new variables for PM2.5 concentrations in counties with monitors
 monitors_rural_avgexp <- rural_native_avgexp
@@ -249,13 +255,13 @@ sd_PM25_row_main <- data.frame(sd(rural_native_avgexp$avg_pm_all),
 names(sd_PM25_row_main) <- names(num_counties_row_main) 
 # Rural counties: model mean concentrations & SD
 rural_native_modelexp <- avg_modelPM25 %>% filter(county_type == 1,
-                                                  as.numeric(land_use) >= 4)
+                                                  as.numeric(land_use) >= 5)
 rural_general_modelexp <- avg_modelPM25 %>% filter(county_type == 0,
-                                                   as.numeric(land_use) >= 4)
+                                                   as.numeric(land_use) >= 5)
 rural_native_monitor_modelexp <- avg_modelPM25 %>% inner_join(native_avg_exp) %>%
-  filter(county_type == 1, as.numeric(land_use) >= 4)
+  filter(county_type == 1, as.numeric(land_use) >= 5)
 rural_general_monitor_modelexp <- avg_modelPM25 %>% inner_join(monitors_general_avgexp) %>%
-  filter(county_type == 0, as.numeric(land_use) >= 4)
+  filter(county_type == 0, as.numeric(land_use) >= 5)
 
 
 avg_modelPM25_row_main <-data.frame(mean(rural_native_modelexp$avg_modelpm),
@@ -335,7 +341,6 @@ row.names(table_1_main_rural) <- c("Number of Counties",
                         "Mean Model PM2.5 Concentrations",
                         "Population Density",
                         "HH Income")
-require(data.table) #need to convert for latex export
 table1_rural_dt <- setDT(table_1_main_rural)
 main_table1_rural <- xtable(table1_rural_dt)
 main_table1_rural

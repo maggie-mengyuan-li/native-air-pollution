@@ -86,7 +86,9 @@ pred_df =
 
 ## ADJUSTED PM VALUES! AT LAST!
 monitor_adj <- pred_df %>% 
-   modelr::add_predictions(mod.all$gam)
+   modelr::add_predictions(mod.all$gam, interval = "confidence")
+
+predict(mod.all$gam, newdata = pred_df, interval = "confidence")
 
 ## edit year column to just be last 2 characters
 monitor_adj$year <- substr(monitor_adj$year, 3, 4)
