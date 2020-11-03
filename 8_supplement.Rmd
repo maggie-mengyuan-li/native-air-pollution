@@ -115,9 +115,9 @@ generalPM25_df <- do.call(rbind, all_general_PM25)
 
 #join with covariates data and subset out rural counties
 rural_nativePM25 <- inner_join(nativePM25_df, covariates, by = "County") %>%
-  subset(as.numeric(as.character(land_use)) >= 4)
+  subset(as.numeric(as.character(land_use)) >= 5)
 rural_generalPM25 <- inner_join(generalPM25_df, covariates, by = "County") %>%
-  subset(as.numeric(as.character(land_use)) >= 4)
+  subset(as.numeric(as.character(land_use)) >= 5)
 ```
 
 ###2.1.2 Create data tables & make bar graphs
@@ -135,7 +135,7 @@ sum(ruralnative_PM25_freq$prop)
 #Bar graph all counties
 rural_PM25_plot <- ggplot(rural_PM25_tbl, 
                             aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  theme_classic() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
@@ -143,7 +143,8 @@ rural_PM25_plot <- ggplot(rural_PM25_tbl,
         axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
+        legend.text = element_text(size = 12),
+        legend.position = c(0.8, 0.8)) +
   labs(#title = expression(paste("Rural ", PM[2.5], " Monitor Distribution, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -152,7 +153,7 @@ rural_PM25_plot <- ggplot(rural_PM25_tbl,
 
 rural_PM25_tbl
 rural_PM25_plot 
-# ggsave("figures/supplement/rural_monitor_bar.png")
+ggsave("figures/supplement/rural_monitor_bar.png")
 
 ```
 
@@ -181,7 +182,7 @@ sum(non_ne_native_PM25_freq$prop)
 #Bar graph all counties
 non_ne_PM25_plot <- ggplot(non_ne_PM25_tbl, 
                             aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  theme_classic() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
@@ -189,7 +190,8 @@ non_ne_PM25_plot <- ggplot(non_ne_PM25_tbl,
         axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
+        legend.text = element_text(size = 12),
+        legend.position = c(0.8, 0.8)) +
   labs(#title = expression(paste("Non-NE ", PM[2.5], " Monitor Distribution, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -237,7 +239,6 @@ all_native_counties_sens <- rbind(census, all_reservation, cluster)
 
 # only keep unique values, because classification definitions overlap
 all_native_counties_sens <- unique(all_native_counties_sens) 
-view(all_native_counties_sens)
 
 # County list of all non-native counties
 all_counties_list <- all_counties %>% dplyr::select(GEOID) %>% 
@@ -288,7 +289,7 @@ sum(native_PM25_freq_sens$prop)
 #Bar graph all counties
 all_PM25_plot_sens <- ggplot(all_PM25_tbl_sens, 
                             aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  theme_classic() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
@@ -296,7 +297,8 @@ all_PM25_plot_sens <- ggplot(all_PM25_tbl_sens,
         axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
+        legend.text = element_text(size = 12),
+        legend.position = c(0.8, 0.8)) +
   labs(#title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018 (Any Tribal Lands)")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -331,7 +333,7 @@ census_PM25_plot <- ggplot(census_PM25_tbl,
                             aes(x=lvl_bins, 
                                 y = total_prop,
                                 fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  theme_classic() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
@@ -339,7 +341,8 @@ census_PM25_plot <- ggplot(census_PM25_tbl,
         axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
+        legend.text = element_text(size = 12),
+        legend.position = c(0.8, 0.8)) +
   labs(#title = expression(paste(PM[2.5], " Monitor Distribution \n in AI vs Non-AI Populated Census Counties, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -384,7 +387,7 @@ cluster_PM25_plot <- ggplot(cluster_PM25_tbl,
                             aes(x=lvl_bins, 
                                 y = total_prop,
                                 fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  theme_classic() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
@@ -392,7 +395,8 @@ cluster_PM25_plot <- ggplot(cluster_PM25_tbl,
         axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
+        legend.text = element_text(size = 12),
+        legend.position = c(0.8, 0.8)) +
   labs(#title = expression(paste(PM[2.5], " Monitor Distribution in Rural Clustered Counties, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -418,7 +422,7 @@ reservation_PM25_plot <- ggplot(reservation_PM25_tbl,
                             aes(x=lvl_bins, 
                                 y = total_prop,
                                 fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  theme_classic() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
@@ -426,7 +430,8 @@ reservation_PM25_plot <- ggplot(reservation_PM25_tbl,
         axis.title = element_text(size = 14),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
+        legend.text = element_text(size = 12),
+        legend.position = c(0.8, 0.8)) +
   labs(#title = expression(paste(PM[2.5], " Monitor Distribution (Reservations), 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties",
@@ -523,7 +528,7 @@ model_PM25 <- model_PM25 %>% dplyr::rename(County=FIPS)
 model_PM25$State <- as.numeric(model_PM25$State)
 
 # define rural counties
-ruralPM25_counties <- main_analysis_counties %>% inner_join(covariates) %>% subset(as.numeric(as.character(land_use)) >=4)
+ruralPM25_counties <- main_analysis_counties %>% inner_join(covariates) %>% subset(as.numeric(as.character(land_use)) >=5)
 
 # inner join with rural counties dataset to get modeled pm2.5 values for these counties
 rural_model_PM25 <- inner_join(model_PM25, covariates) %>% inner_join(ruralPM25_counties)

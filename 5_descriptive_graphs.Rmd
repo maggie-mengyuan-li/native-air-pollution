@@ -86,9 +86,9 @@ pred_df =
 
 ## ADJUSTED PM VALUES! AT LAST!
 monitor_adj <- pred_df %>% 
-   modelr::add_predictions(mod.all$gam, interval = "confidence")
+   modelr::add_predictions(mod.all$gam)
 
-predict(mod.all$gam, newdata = pred_df, interval = "confidence")
+predict(mod.all$gam, newdata = pred_df)
 
 ## edit year column to just be last 2 characters
 monitor_adj$year <- substr(monitor_adj$year, 3, 4)
@@ -409,7 +409,7 @@ monitor_combined <- ggplot() +
 monitor_combined
 
 # add caption/title
-grob_monitor_combined <- grobTree(textGrob("Measured", x=0.05,  y=0.9, hjust=0,gp=gpar(fontsize=24)))
+grob_monitor_combined <- grobTree(textGrob("Measured", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=24)))
 
 # Plot & save
 monitor_combined + annotation_custom(grob_monitor_combined)
@@ -752,13 +752,13 @@ model_combined <- ggplot() +
 model_combined
 
 # add caption/title
-grob_model_combined <- grobTree(textGrob("Modeled", x=0.05,  y=0.9, hjust=0,gp=gpar(fontsize=24)))
+grob_model_combined <- grobTree(textGrob("Modeled", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=24)))
 
 # Plot & save
 model_combined + annotation_custom(grob_model_combined)
 
 
-ggsave("figures/updated_10.22/model_combined.png")
+ggsave("figures/updated_10.30/model_combined.png")
 ```
 ### Calulate average decline across study period (monitor and model) -- reported in results
 ```{r}

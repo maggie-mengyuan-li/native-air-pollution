@@ -66,30 +66,30 @@ all_PM25_tbl <- combine_freq(native_PM25_freq, general_PM25_freq)
 sum(general_PM25_freq$prop)
 sum(native_PM25_freq$prop)
 
-#Bar graph all counties
-all_PM25_plot <- ggplot(all_PM25_tbl, 
-                            aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
-  geom_bar(stat="identity", position = "dodge") +
-  geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
-  scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
-  theme(plot.title = element_text(size = 20),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
-       x = "Average number of monitors per year by county type",
-       y = "Percent of Total Counties",
-       fill = "County Type") 
-all_PM25_plot 
-all_PM25_tbl
+# #Bar graph all counties
+# all_PM25_plot <- ggplot(all_PM25_tbl, 
+#                             aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
+#   theme_linedraw() + #define df cols for x and y axis, select minimal theme
+#   geom_bar(stat="identity", position = "dodge") +
+#   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
+#   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
+#   theme(plot.title = element_text(size = 20),
+#         axis.title = element_text(size = 16),
+#         axis.text = element_text(size = 12),
+#         legend.title = element_text(size = 14),
+#         legend.text = element_text(size = 12)) +
+#   labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
+#        x = "Average number of monitors per year by county type",
+#        y = "Percent of Total Counties",
+#        fill = "County Type") 
+# all_PM25_plot 
+# all_PM25_tbl
 
 ## test changing colors
 ## AI = turquoise?
 ## Non-AI = beige
 ggplot(all_PM25_tbl, aes(x=lvl_bins, y = total_prop, fill=county_type)) + 
-  theme_linedraw() + #define df cols for x and y axis, select minimal theme
+  theme_classic() + #define df cols for x and y axis, select minimal theme
   geom_bar(stat="identity", position = "dodge") +
   geom_text(aes(label=total_freq), position=position_dodge(width=0.9), vjust=-0.25) + #bin sample size above bars
   scale_y_continuous(labels = function(x) paste0(x*100, "%")) + #change y-axis to percent
@@ -97,8 +97,9 @@ ggplot(all_PM25_tbl, aes(x=lvl_bins, y = total_prop, fill=county_type)) +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 12),
         legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) +
-  labs(title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
+        legend.text = element_text(size = 12),
+        legend.position = c(0.8, 0.8)) +
+  labs(#title = expression(paste(PM[2.5], " Monitor Distribution, 2000-2018")),
        x = "Average number of monitors per year by county type",
        y = "Percent of Total Counties") +
   scale_fill_manual("County Type", values = c("AI-Populated County" = "#5ab4ac", "Non-AI Populated County" = "#d8b365"))
@@ -106,25 +107,25 @@ ggplot(all_PM25_tbl, aes(x=lvl_bins, y = total_prop, fill=county_type)) +
 ggsave("figures/updated_10.22/recolored_monitors.png")
 ```
 
-#### 3.1.2.1 MAIN ANALYSIS: Chi-Squared test to compare monitor distributions
+#### 3.1.2.1 MAIN ANALYSIS: Chi-Squared test to compare monitor distributions (not doing this)
 ```{r}
 # Run just part of the above function to get table of all unique avg_mon values for AI and non-AI populated counties, and then use table function to make contingency table
-native_PM25_monitors
-general_PM25_monitors
-all_mon <- rbind(general_PM25_freq, native_PM25_freq)
-all_mon <- all_mon %>% 
-  mutate(bins = case_when(
-        avg_mon == 0 ~ "0",
-        avg_mon > 0 & avg_mon < 1 ~ "(0,1)", 
-        avg_mon >= 1 & avg_mon < 2 ~ "[1,2)",
-        avg_mon >= 2 ~ ">=2"))
-all_mon$bins <- as.factor(all_mon$bins)
-final_mon_tbl <- all_mon %>%
-  group_by(bins, county_type)
-final_mon_tbl
-monitor_contingency <- table(final_mon_tbl$county_type, final_mon_tbl$bins)
-
-chisq.test(monitor_contingency)
+# native_PM25_monitors
+# general_PM25_monitors
+# all_mon <- rbind(general_PM25_freq, native_PM25_freq)
+# all_mon <- all_mon %>% 
+#   mutate(bins = case_when(
+#         avg_mon == 0 ~ "0",
+#         avg_mon > 0 & avg_mon < 1 ~ "(0,1)", 
+#         avg_mon >= 1 & avg_mon < 2 ~ "[1,2)",
+#         avg_mon >= 2 ~ ">=2"))
+# all_mon$bins <- as.factor(all_mon$bins)
+# final_mon_tbl <- all_mon %>%
+#   group_by(bins, county_type)
+# final_mon_tbl
+# monitor_contingency <- table(final_mon_tbl$county_type, final_mon_tbl$bins)
+# 
+# chisq.test(monitor_contingency)
 
 # Conclusion: monitor distribution is not independent of AI/non-AI populated county status
 ```
