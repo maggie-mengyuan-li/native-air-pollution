@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(raster)
 ```
+
 #PART 1: DATA CLEANING (MONITOR & MODEL)
 ##1.1 Monitor Data
 ###Read in and clean EPA 
@@ -80,6 +81,7 @@ for (i in 1:length(all_epa_tables)){
 }
 
 #cleaned_list contains list items 1-20, corresponding to years 1999-2018. Rows in each table correspond to specific monitor's annual aggregated PM2.5 measurement.
+cleaned_list[[1]]
 ```
 
 ####For loop to iterate through all the tables; POC = 1, at least 75% observations for that year, and select for no events or events excluded monitors (at least for now)
@@ -112,7 +114,7 @@ IMPROVE Monitoring Network data downloaded from here: http://views.cira.colostat
 I selected EPA PM2.5 MASS FRM (88101) Daily, 2000-2018, and clipped it (PM2_5_1999_2018_rural_clipped.txt). I forgot to download the data the first time with geolocation information so the second imported dataset (IMPROVE_location_tbl) has the lat/lon coordinates, which I joined to the first dataset.
 
 ```{r}
-PM2_5_1999_2018_rural_clipped<-read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/PM2_5_1999_2018_rural_clipped.txt", sep="")
+PM2_5_1999_2018_rural_clipped<-read.csv("Data/PM2_5_1999_2018_rural_clipped.txt", sep="")
 #Aggregate daily to annual data
 #Step 1: only keep the year in the date columns, to make it easier to aggregate
 
@@ -186,7 +188,7 @@ PM25_rural_annual <- subset(PM25_rural_annual,
 
 # July 7 Note: I was dumb and didn't download the data above with Lat/Long coordinates. So I had to re-download it and join the two datasets.
 
-IMPROVE_location_tbl <- read.csv("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/IMPROVE_location_tbl.csv")
+IMPROVE_location_tbl <- read.csv("Data/IMPROVE_location_tbl.csv")
 IMPROVE_lat_lon <- subset(IMPROVE_location_tbl,
                           select = c(2,6,8,9))
 #Rename column Code to SiteCode to match other table
@@ -232,7 +234,9 @@ PM25_rural_locations <- PM25_rural_locations %>% filter(Year != "1999") %>%
   filter(!str_detect(county_cleaned, "^15"))
 
 ```
+
 ###Monitor PM2.5 table for all years 1999-2018 (join EPA + IMPROVE)
+
 ```{r}
 #Make a list to store IMPROVE tables by year
 IMPROVE_list <- list()

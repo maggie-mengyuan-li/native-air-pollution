@@ -68,27 +68,73 @@ mod.all <-  gamm4(annual_mean_all ~ county_type*as.factor(year) + popd_q + hhinc
                  data = dta.all)
 summary(mod.all$gam)
 
-# mod.lmer <- lmer(annual_mean_all ~ county_type + year +
-#                     popd_q + 
-#                     hhinc_q +
-#                     county_type*year +
-#                     (1|State/County),
-#                   data = dta.all, REML=FALSE)
-# summary(mod.lmer)
+## OG as of pre-11/30/2020
+# pred_df =
+#    expand_grid(
+#       year = 2000:2018,
+#       county_type = c(0,1),
+#       popd_q = "(196,304]",
+#       hhinc_q = "(4.19e+04,4.39e+04]"
+#    )
 
-pred_df = 
+## most common decile
+dta.all %>% 
+  group_by(county_type, hhinc_q) %>% 
+  summarize(N = n()) %>% 
+  filter(N==max(N))
+
+## most common AI decile
+pred_df_AI =
+   expand_grid(
+      year = 2000:2018,
+      county_type = c(0,1),
+      popd_q = "[0.5,10.6]",
+      hhinc_q = "(3.64e+04,3.9e+04]"
+   )
+
+## most common non-AI decile--***USE THIS FOR ADJUSTED PM VALUES DESCRIPTIVE GRAPH***
+pred_df_nonAI =
    expand_grid(
       year = 2000:2018,
       county_type = c(0,1),
       popd_q = "(196,304]",
-      hhinc_q = "(4.19e+04,4.39e+04]"
+      hhinc_q = "(5.64e+04,6.54e+04]"
    )
 
-## ADJUSTED PM VALUES! AT LAST!
-monitor_adj <- pred_df %>% 
+## ***ADJUSTED PM VALUES!***
+monitor_adj <- 
+  pred_df_nonAI %>% 
    modelr::add_predictions(mod.all$gam)
 
-predict(mod.all$gam, newdata = pred_df)
+## JUST TO TEST
+# monitor_adj = dta.all %>% 
+#   modelr::add_predictions(mod.all$gam) %>% 
+#   group_by(year, county_type) %>% 
+#   summarize(annual_mean_all = mean(pred))
+
+# ## JUST TO CHECK WITH BELOW: average decline AI monitor with most common AI decile
+# monitor_adj_AI %>% 
+#   filter(county_type == 1) %>% pull(pred) %>% first() - 
+#   monitor_adj_AI %>% 
+#   filter(county_type == 1) %>% pull(pred) %>% last()
+# 
+# ## average decline non-AI monitor
+# monitor_adj_AI %>% 
+#   filter(county_type == 0) %>% pull(pred) %>% first() - 
+#   monitor_adj_AI %>% 
+#   filter(county_type == 0) %>% pull(pred) %>% last()
+# 
+# ## JUST TO CHECK WITH ABOVE: average decline AI monitor with most common non-AI decile
+# monitor_adj_nonAI %>% 
+#   filter(county_type == 1) %>% pull(pred) %>% first() - 
+#   monitor_adj_nonAI %>% 
+#   filter(county_type == 1) %>% pull(pred) %>% last()
+# 
+# ## average decline non-AI monitor
+# monitor_adj_nonAI %>% 
+#   filter(county_type == 0) %>% pull(pred) %>% first() - 
+#   monitor_adj_nonAI %>% 
+#   filter(county_type == 0) %>% pull(pred) %>% last()
 
 ## edit year column to just be last 2 characters
 monitor_adj$year <- substr(monitor_adj$year, 3, 4)
@@ -113,6 +159,7 @@ ai_monitor_adj
 nai_monitor_adj
 
 ```
+
 
 ```{r Get unadjusted mean PM2.5 for AI counties & Plot all adj and unadj values}
 
@@ -304,69 +351,7 @@ monitor_nai_timetrend + annotation_custom(grob_nai_monitor)
 #### Attempt to combine AI and non-AI in one graph!
 
 ```{r combined graph}
-
-# ## combine all dfs into one df; first select relevant cols only from each; NOT WORKING
-# 
-# native_exp_final <- native_exp_final %>% 
-#   dplyr::select(year, county_type, State_Name, annual_mean_all) %>% 
-#   mutate(State_Name = "AI-populated County State Mean Concentrations (Unadjusted)")
-# 
-# nonnative_exp_final <- nonnative_exp_final %>% 
-#   dplyr::select(year, county_type, State_Name, annual_mean_all) %>% 
-#   mutate(State_Name = "Non-AI-populated County State Mean Concentrations (Unadjusted)")
-# 
-# native_avgdec <- native_avgdec %>% 
-#   dplyr::select(year, county_type, State_Name, annual_mean_all)
-# 
-# nonnative_avgdec <- nonnative_avgdec %>% 
-#   dplyr::select(year, county_type, State_Name, annual_mean_all)
-# 
-# ai_monitor_adj <- ai_monitor_adj %>% 
-#   dplyr::select(year, county_type, State_Name, annual_mean_all)
-# 
-# nai_monitor_adj <- nai_monitor_adj %>% 
-#   dplyr::select(year, county_type, State_Name, annual_mean_all)
-# 
-# combined_monitor_df <- rbind.data.frame(native_exp_final, nonnative_exp_final,
-#                                         native_avgdec, nonnative_avgdec,
-#                                         ai_monitor_adj, nai_monitor_adj)
-# combined_monitor_df
-
-# ## AI lines = purple
-# ## Non-AI lines = green
-# 
-# ggplot() + 
-#   geom_line(data = native_exp_final,
-#             aes(x=year, y = annual_mean_all,
-#                 group = State_Name, colour= State_Name),
-#             color = "#e7d4e8") + #each line = state mean
-#   geom_line(data = nonnative_exp_final,
-#             aes(x=year, y = annual_mean_all,
-#                 group = State_Name),
-#             color = "#d9f0d3") + #unadjusted means by state
-#   geom_line(data=native_avgdec,
-#             aes(x=year, y=annual_mean_all,
-#                 group=State_Name),
-#             color="#af8dc3", linetype = "dashed", 
-#             size = 1.25) + #unadjusted national mean (dashed)
-#   geom_line(data=nonnative_avgdec,
-#             aes(x=year, y=annual_mean_all,
-#                 group=State_Name),
-#             color="#7fbf7b", linetype = "dashed", 
-#             size = 1.25) + #unadjusted national mean
-#   geom_line(data= ai_monitor_adj,
-#             aes(x=year, y=pred,
-#                 group=State_Name),
-#             color = "#762a83",
-#             size = 1.25) + #adjusted national mean
-#   geom_line(data= nai_monitor_adj,
-#             aes(x=year, y=pred,
-#                 group=State_Name),
-#             color = "#1b7837",
-#             size = 1.25)  #adjusted national mean
-
-
-## AI lines = turquoise?
+## AI lines = teal
 ## Non-AI lines = beige
 
 monitor_combined <- ggplot() + 
@@ -409,13 +394,16 @@ monitor_combined <- ggplot() +
 monitor_combined
 
 # add caption/title
-grob_monitor_combined <- grobTree(textGrob("Measured", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=24)))
+grob_monitor_combined <- grobTree(textGrob(expression(paste("Measured ", PM[2.5])), x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=24)))
+
+grob_monitor_data = grobTree(textGrob("Data Source: EPA-AQS and IMPROVE monitors", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=14)))
 
 # Plot & save
 monitor_combined + annotation_custom(grob_monitor_combined)
+ggsave("figures/updated_11.20/monitor_combined.png")
 
-
-ggsave("figures/updated_10.22/monitor_combined.png")
+monitor_combined + annotation_custom(grob_monitor_data)
+ggsave("figures/updated_11.20/monitor_combined_datasource.png")
 
 
 ## combined df plot: still a WIP
@@ -479,17 +467,43 @@ summary(mod.all.modelPM$gam)
 #                   data = dta.all.modelPM, REML=FALSE)
 # summary(mod.lmer.modelPM)
 
-pred_df.model = 
+# pred_df.model = 
+#    expand_grid(
+#       Year = 2000:2018,
+#       county_type = c(0,1),
+#       popd_q = "(32.7,45.6]",
+#       hhinc_q = "(4.03e+04,4.24e+04]"
+#    )
+
+## most common decile
+dta.all.modelPM %>% 
+  group_by(county_type, popd_q) %>% 
+  summarize(N = n()) %>% 
+  filter(N==max(N))
+
+## most common AI decile
+pred_df.model_AI =
    expand_grid(
       Year = 2000:2018,
       county_type = c(0,1),
-      popd_q = "(32.7,45.6]",
-      hhinc_q = "(4.03e+04,4.24e+04]"
+      popd_q = "(4.4,12.8]",
+      hhinc_q = "(3.57e+04,3.8e+04]"
    )
 
-## ADJUSTED PM VALUES! AT LAST!
-model_adj <- pred_df.model %>% 
+## most common non-AI decile--***USE THIS FOR ADJUSTED PM VALUES DESCRIPTIVE GRAPH***
+pred_df.model_nonAI =
+   expand_grid(
+      Year = 2000:2018,
+      county_type = c(0,1),
+      popd_q = "(160,382]",
+      hhinc_q = "(5.75e+04,1.16e+05]"
+   )
+
+## ***ADJUSTED PM VALUES!***
+model_adj <- 
+  pred_df.model_nonAI %>% 
    modelr::add_predictions(mod.all.modelPM$gam)
+model_adj
 
 ## edit year column to just be last 2 characters
 model_adj$Year <- substr(model_adj$Year, 3, 4)
@@ -752,33 +766,79 @@ model_combined <- ggplot() +
 model_combined
 
 # add caption/title
-grob_model_combined <- grobTree(textGrob("Modeled", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=24)))
+grob_model_combined <- grobTree(textGrob(expression(paste("Modeled ", PM[2.5])), x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=24)))
+
+grob_model_data = grobTree(textGrob("Data Source: van Donkelaar et al. model", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=14)))
 
 # Plot & save
 model_combined + annotation_custom(grob_model_combined)
+ggsave("figures/updated_11.20/model_combined.png")
 
+model_combined + annotation_custom(grob_model_data)
+ggsave("figures/updated_11.20/model_combined_datasource.png")
 
-ggsave("figures/updated_10.30/model_combined.png")
 ```
-### Calulate average decline across study period (monitor and model) -- reported in results
+
+### Calulate average decline across study period (monitor and model) -- NOT VALID, SEE THE CODE CHUNKS ABOVE FOR EXACT ESTIMATES
+
 ```{r}
-ai_monitor_adj
-nai_monitor_adj
 
-ai_model_adj
-nai_model_adj
+## MONITOR: predict without ref group (og data)
 
-## average decline AI monitor
-ai_monitor_adj$annual_mean_all %>% first() - ai_monitor_adj$annual_mean_all %>% last()
+preds_all <- dta.all %>% 
+  modelr::add_predictions(mod.all$gam) %>% 
+  group_by(year, county_type) %>% 
+  summarize(adj_mean = mean(pred))
+
+## average decline AI monitor with most common non-AI decile
+preds_all %>% 
+  filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
+  preds_all %>% 
+  filter(county_type == 1) %>% pull(adj_mean) %>% last()
 
 ## average decline non-AI monitor
-nai_monitor_adj$annual_mean_all %>% first() - nai_monitor_adj$annual_mean_all %>% last()
+preds_all %>% 
+  filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
+  preds_all %>% 
+  filter(county_type == 0) %>% pull(adj_mean) %>% last()
 
-## average decline AI model
-ai_model_adj$annual_mean_all %>% first() - ai_model_adj$annual_mean_all %>% last()
+## MODEL: predict without ref group (og data), add two chunks output below to main text
 
-## average decline in non-AI model
-nai_model_adj$annual_mean_all %>% first() - nai_model_adj$annual_mean_all %>% last()
+preds_all.modelPM <- dta.all.modelPM %>% 
+  modelr::add_predictions(mod.all.modelPM$gam) %>% 
+  group_by(Year, county_type) %>% 
+  summarize(adj_mean = mean(pred))
+
+## average decline AI monitor
+preds_all.modelPM %>% 
+  filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
+  preds_all %>% 
+  filter(county_type == 1) %>% pull(adj_mean) %>% last()
+
+## average decline non-AI monitor
+preds_all.modelPM %>% 
+  filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
+  preds_all %>% 
+  filter(county_type == 0) %>% pull(adj_mean) %>% last()
+
+
+# ai_monitor_adj
+# nai_monitor_adj
+# 
+# ai_model_adj
+# nai_model_adj
+# 
+# ## average decline AI monitor
+# ai_monitor_adj$annual_mean_all %>% first() - ai_monitor_adj$annual_mean_all %>% last()
+# 
+# ## average decline non-AI monitor
+# nai_monitor_adj$annual_mean_all %>% first() - nai_monitor_adj$annual_mean_all %>% last()
+# 
+# ## average decline AI model
+# ai_model_adj$annual_mean_all %>% first() - ai_model_adj$annual_mean_all %>% last()
+# 
+# ## average decline in non-AI model
+# nai_model_adj$annual_mean_all %>% first() - nai_model_adj$annual_mean_all %>% last()
 
 ```
 

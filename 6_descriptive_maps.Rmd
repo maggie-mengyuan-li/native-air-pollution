@@ -264,7 +264,7 @@ Old code for differentiating between monitors active for less than half or great
 colors <- c("#8dd3c7",  "#ffffb3", "#fb8072")
 labels <- c("Native Census Population >5% County", 
                       "Rural Wallace et al. Cluster",
-                      "County within Reservation")
+                      "County within Federally Recognized Tribal Entities")
 sizes <- c(10, 10, 10)
 shapes <- c("square", "square", "square")
 borders <- c("#8dd3c7",  "#ffffb3", "#fb8072")
