@@ -136,8 +136,8 @@ monitor_adj <-
 #   monitor_adj_nonAI %>% 
 #   filter(county_type == 0) %>% pull(pred) %>% last()
 
-## edit year column to just be last 2 characters
-monitor_adj$year <- substr(monitor_adj$year, 3, 4)
+## ## edit year column to be a factor
+monitor_adj$year <- as.factor(monitor_adj$year)
 
 ## add additional ID column for group aes in ggplot
 monitor_adj$State_Name <- "Adjusted Mean (All States)"
@@ -196,7 +196,7 @@ for (i in 1:length(native_state_exp)){
 }
 
 native_exp_final 
-native_exp_final$year <- substr(native_exp_final$year, 3, 4)
+# native_exp_final$year <- substr(native_exp_final$year, 3, 4)
 native_exp_final$year <- as.factor(native_exp_final$year)
 #fill in NAs in movave column; have first year be the first year, 2nd year be 2 year moving avg
 native_exp_final$county_type <- "American Indian"
@@ -243,7 +243,9 @@ monitor_ai_timetrend <- ggplot() +
        x = "Year") + theme_linedraw()  +
   theme(plot.title = element_text(size = 18),
         axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) 
+        axis.text = element_text(size = 12),
+        axis.title.x=element_blank()) +
+  guides(x =  guide_axis(angle = 45)) 
 monitor_ai_timetrend
 
 # customlabel inside graph
@@ -291,7 +293,7 @@ for (i in 1:length(nonnative_state_exp)){
 }
 
 nonnative_exp_final 
-nonnative_exp_final$year <- substr(nonnative_exp_final$year, 3, 4)
+# nonnative_exp_final$year <- substr(nonnative_exp_final$year, 3, 4)
 nonnative_exp_final$year <- as.factor(nonnative_exp_final$year)
 #fill in NAs in movave column; have first year be the first year, 2nd year be 2 year moving avg
 nonnative_exp_final$county_type <- "Non-American Indian"
@@ -335,7 +337,9 @@ monitor_nai_timetrend <- ggplot() +
        x = "Year") + theme_linedraw() +
   theme(plot.title = element_text(size = 18),
         axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) + theme(legend.position="None")
+        axis.text = element_text(size = 12),
+        axis.title.x=element_blank()) +
+  guides(x =  guide_axis(angle = 45)) 
 monitor_nai_timetrend 
 
 # 9/7 for paper
@@ -388,9 +392,9 @@ monitor_combined <- ggplot() +
   labs(x = "Year") + theme_linedraw() +
   theme(plot.title = element_text(size = 18),
         axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14),
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12)) 
+        axis.text = element_text(size = 12),
+        axis.title.x=element_blank()) +
+  guides(x =  guide_axis(angle = 45)) 
 monitor_combined
 
 # add caption/title
@@ -399,11 +403,15 @@ grob_monitor_combined <- grobTree(textGrob(expression(paste("Measured ", PM[2.5]
 grob_monitor_data = grobTree(textGrob("Data Source: EPA-AQS and IMPROVE monitors", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=14)))
 
 # Plot & save
+monitor_combined
+ggsave("figures/updated_12.7/monitor_combined_notitle.png")
+
+
 monitor_combined + annotation_custom(grob_monitor_combined)
-ggsave("figures/updated_11.20/monitor_combined.png")
+ggsave("figures/updated_12.7/monitor_combined.png")
 
 monitor_combined + annotation_custom(grob_monitor_data)
-ggsave("figures/updated_11.20/monitor_combined_datasource.png")
+ggsave("figures/updated_12.7/monitor_combined_datasource.png")
 
 
 ## combined df plot: still a WIP
@@ -505,8 +513,9 @@ model_adj <-
    modelr::add_predictions(mod.all.modelPM$gam)
 model_adj
 
-## edit year column to just be last 2 characters
-model_adj$Year <- substr(model_adj$Year, 3, 4)
+## edit year column to be a factor
+# model_adj$Year <- substr(model_adj$Year, 3, 4)
+model_adj$Year <- as.factor(model_adj$Year)
 
 ## add additional ID column for group aes in ggplot
 model_adj$State_Name <- "Adjusted Mean (All States)"
@@ -564,7 +573,7 @@ for (i in 1:length(native_state_exp)){
 }
 
 native_modelpm_final
-native_modelpm_final$Year <- substr(native_modelpm_final$Year, 3, 4)
+# native_modelpm_final$Year <- substr(native_modelpm_final$Year, 3, 4)
 native_modelpm_final$Year <- as.factor(native_modelpm_final$Year)
 #fill in NAs in movave column; have first Year be the first Year, 2nd Year be 2 Year moving avg
 native_modelpm_final$county_type <- "American Indian"
@@ -611,7 +620,9 @@ model_ai_timetrend <- ggplot() +
        x = "Year") + theme_linedraw()  +
   theme(plot.title = element_text(size = 18),
         axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) 
+        axis.text = element_text(size = 12),
+        axis.title.x=element_blank()) +
+  guides(x =  guide_axis(angle = 45)) 
 model_ai_timetrend 
 
 # customlabel inside graph
@@ -660,7 +671,7 @@ for (i in 1:length(nonnative_state_exp)){
 }
 
 nonnative_modelpm_final
-nonnative_modelpm_final$Year <- substr(nonnative_modelpm_final$Year, 3, 4)
+# nonnative_modelpm_final$Year <- substr(nonnative_modelpm_final$Year, 3, 4)
 nonnative_modelpm_final$Year <- as.factor(nonnative_modelpm_final$Year)
 #fill in NAs in movave column; have first Year be the first Year, 2nd Year be 2 Year moving avg
 nonnative_modelpm_final$county_type <- "Non-AI"
@@ -706,7 +717,9 @@ model_nai_timetrend <- ggplot() +
        x = "Year") + theme_linedraw()  +
   theme(plot.title = element_text(size = 18),
         axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14)) 
+        axis.text = element_text(size = 12),
+        axis.title.x=element_blank()) +
+  guides(x =  guide_axis(angle = 45)) 
 model_nai_timetrend 
 
 # customlabel inside graph
@@ -760,9 +773,9 @@ model_combined <- ggplot() +
   labs(x = "Year") + theme_linedraw() +
   theme(plot.title = element_text(size = 18),
         axis.title = element_text(size = 16),
-        axis.text = element_text(size = 14),
-        legend.title = element_text(size = 14),
-        legend.text = element_text(size = 12))
+        axis.text = element_text(size = 12),
+        axis.title.x=element_blank()) +
+  guides(x =  guide_axis(angle = 45)) 
 model_combined
 
 # add caption/title
@@ -772,10 +785,10 @@ grob_model_data = grobTree(textGrob("Data Source: van Donkelaar et al. model", x
 
 # Plot & save
 model_combined + annotation_custom(grob_model_combined)
-ggsave("figures/updated_11.20/model_combined.png")
+ggsave("figures/updated_12.7/model_combined.png")
 
 model_combined + annotation_custom(grob_model_data)
-ggsave("figures/updated_11.20/model_combined_datasource.png")
+ggsave("figures/updated_12.7/model_combined_datasource.png")
 
 ```
 
