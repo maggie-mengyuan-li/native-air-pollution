@@ -209,7 +209,9 @@ native_census <- native_census %>%
   dplyr::rename(County = GEOID) %>%
   dplyr::select(County, native_prop)
 covariates <- covariates %>% inner_join(native_census)
-covariates
+
+# 1/26/2021 join in climate zones
+covariates = covariates %>% inner_join(climatezonefips)
 ```
 
 

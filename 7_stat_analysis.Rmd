@@ -83,12 +83,28 @@ detrend_lmer_full_catyr_intx <- function(data){
 
 #### Main Analysis
 ```{r}
+test = all_ctyear_exp %>% inner_join(climatezonefips)
+test
+
+# Full w/ InterX
+summary(detrend_lmer_full_catyr_intx(test))
+
+# Full w/ InterX with climate as variable
+exp_lme_climate <- lmer(annual_mean_all ~ county_type + year +
+                  popd_q + 
+                  hhinc_q +
+                  Climate_Zone +
+                  county_type*year +
+                  (1|State/County),
+                data = test, REML=FALSE)
+summary(exp_lme_climate)
+
 # Crude
 summary(detrend_lmer_crude(all_ctyear_exp))
 # Partial
 summary(detrend_lmer_partial(all_ctyear_exp))
 # Full
-summary
+summary(detrend_lmer_partial(all_ctyear_exp))
 # Full w/ InterX
 summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))
 
@@ -202,8 +218,11 @@ grob_monitor <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
   gp=gpar(fontsize=30)))
 
 # Plot and save
-monitor_interx_plot + annotation_custom(grob_monitor)
-ggsave("figures/updated_12.7/monitor_interx.png")
+# monitor_interx_plot + annotation_custom(grob_monitor)
+# ggsave("figures/updated_12.7/monitor_interx.png")
+
+monitor_interx_plot
+ggsave("presentations/layering_trends/monitor_interx.png") 
 ```
 
 ##### Rural Main Analysis Counties (Sensitivity Analysis)
@@ -391,8 +410,11 @@ grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
   gp=gpar(fontsize=30)))
 
 # Plot and save
-model_interx_plot + annotation_custom(grob)
-ggsave("figures/updated_12.7/model_interx.png")
+# model_interx_plot + annotation_custom(grob)
+# ggsave("figures/updated_12.7/model_interx.png")
+
+model_interx_plot
+ggsave("presentations/layering_trends/model_interx.png") 
 ```
 
 ##### Rural Main Analysis Counties only
