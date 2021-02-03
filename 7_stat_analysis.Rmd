@@ -83,12 +83,28 @@ detrend_lmer_full_catyr_intx <- function(data){
 
 #### Main Analysis
 ```{r}
+test = all_ctyear_exp %>% inner_join(climatezonefips)
+test
+
+# Full w/ InterX
+summary(detrend_lmer_full_catyr_intx(test))
+
+# Full w/ InterX with climate as variable
+exp_lme_climate <- lmer(annual_mean_all ~ county_type + year +
+                  popd_q + 
+                  hhinc_q +
+                  Climate_Zone +
+                  county_type*year +
+                  (1|State/County),
+                data = test, REML=FALSE)
+summary(exp_lme_climate)
+
 # Crude
 summary(detrend_lmer_crude(all_ctyear_exp))
 # Partial
 summary(detrend_lmer_partial(all_ctyear_exp))
 # Full
-summary
+summary(detrend_lmer_partial(all_ctyear_exp))
 # Full w/ InterX
 summary(detrend_lmer_full_catyr_intx(all_ctyear_exp))
 
