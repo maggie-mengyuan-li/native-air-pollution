@@ -218,8 +218,11 @@ grob_monitor <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
   gp=gpar(fontsize=30)))
 
 # Plot and save
-monitor_interx_plot + annotation_custom(grob_monitor)
-ggsave("figures/updated_12.7/monitor_interx.png")
+# monitor_interx_plot + annotation_custom(grob_monitor)
+# ggsave("figures/updated_12.7/monitor_interx.png")
+
+monitor_interx_plot
+ggsave("presentations/layering_trends/monitor_interx.png") 
 ```
 
 ##### Rural Main Analysis Counties (Sensitivity Analysis)
@@ -407,8 +410,11 @@ grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
   gp=gpar(fontsize=30)))
 
 # Plot and save
-model_interx_plot + annotation_custom(grob)
-ggsave("figures/updated_12.7/model_interx.png")
+# model_interx_plot + annotation_custom(grob)
+# ggsave("figures/updated_12.7/model_interx.png")
+
+model_interx_plot
+ggsave("presentations/layering_trends/model_interx.png") 
 ```
 
 ##### Rural Main Analysis Counties only

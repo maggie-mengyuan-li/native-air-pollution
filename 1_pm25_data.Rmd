@@ -284,54 +284,74 @@ I've put one ncdf downloaded from the source for 2008 if you want to try running
 ```{r}
 # Source: Randall Martin's PM2.5 Model http://fizz.phys.dal.ca/~atmos/martin/?page_id=140
 
-# #all counties shapefile
-# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/cb_2018_us_county_500k")
-# counties_shp <- "cb_2018_us_county_500k.shp"
+## install/load relevant libraries
+
+# install.packages("tidyverse")
+# install.packages("raster")
+# install.packages("sf")
+# install.packages("usmap")
+# install.packages("tictoc")
+# library(tidyverse)
+# library(raster)
+# library(sf)
+# library(usmap)
+# library(tictoc)
+# 
+# # read in all counties shapefile
+# counties_shp <- "Data/cb_2018_us_county_500k/cb_2018_us_county_500k.shp"
 # all_counties <- st_read(counties_shp, stringsAsFactors = FALSE)
 # 
-# #group all_counties by state fips, exclude territories and hawaii and alaska
+# # group all_counties by state fips, exclude territories and hawaii and alaska
 # all_counties <- all_counties %>% arrange(STATEFP) %>%
 #   filter(STATEFP != "02",
 #          STATEFP != "15")
 # unique(all_counties$STATEFP)
-# #create state fips key vector
+# all_counties
+# 
+# # each state's fips code in a vector
 # state_fips <- fips(state.name, county = c())
 # 
-# #remove hawaii and alaska (FIPS are 15 and 02)
+# # remove hawaii and alaska (FIPS are 15 and 02)
 # state_fips <- state_fips[!(state_fips %in% c("02","15"))]
 # 
-# #save each state's counties as separate sf's, in a list. the function below will iterate through all of these states.
-# state_list <- list(length(state_fips))
+# # save each state's counties as separate sf's, in a list. the function below will iterate through all of these states.
+# state_list <- list(length(state_fips)) # create list of length 48
 # for (i in 1:length(state_fips)){
 #   state_list[[i]] <- all_counties %>%
 #     filter(STATEFP==state_fips[i])
 # }
+# state_list # each list value = one state; includes polygon counties in that state; 48 states total
+# 
+# # ML Note: you prob don't need to do any of the above for your data since it's point files; 
+# # this is all just for illustrative purposes
 # 
 # # read in ncdf as raster stack for example year: 2008
-# setwd("/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/model_PM25")
-# model_PM25_2008 <- raster("GWRwSPEC_PM25_NA_200801_200812-RH35.nc")
+# model_PM25_2008 <- raster("Data/model_PM25/GWRwSPEC_PM25_NA_200801_200812-RH35.nc")
 # model_PM25_2008 <- stack(model_PM25_2008)
 # 
-# # Make empty list to store model data, iterate through 48 states to extract mean PM2.5 concentrations
-# model_PM25_2008_counties <-list()
 # 
-# # function to extract values from raster into counties shapefile
-# extract_model <- function(list, nc, state_list, state_fips){ 
-#    list[[i]] <- raster::extract(nc, state_list[[i]], 
-#                                 fun=mean, na.rm=TRUE, df=TRUE) #specify function = mean to extract mean concentrations
-#    list[[i]]$County <- state_list[[i]]$COUNTYFP
-#    list[[i]]$State <- state_fips[i]
-#    list[[i]]$FIPS <- paste(list[[i]]$State,list[[i]]$County)
-#    list[[i]]$FIPS <- str_replace_all(list[[i]]$FIPS, " ", "")
-# }
-# extract_model(model_PM25_2008_counties,
-#               model_PM25_2008, state_list, state_fips) #state_list and state_fips are already a list and vector created above
+# # write loop to extract county PM for 2008: this will take a while to run
+# # Sample Year: 2008 for two states
+# 
+# tic() # tictoc helps record the time it takes to run things in R
+# for (i in 1:2){ # just for FIPS = 01 (AL), 04 (AZ)
+#   model_PM25_2008_counties[[i]] <- raster::extract(model_PM25_2008,
+#                                                    state_list[[i]],
+#                                                    fun=mean, na.rm=TRUE, df=TRUE) #specify function = mean to extract mean concentrations
+#   model_PM25_2008_counties[[i]]$County <- state_list[[i]]$COUNTYFP
+#   model_PM25_2008_counties[[i]]$State <- state_fips[i]
+#   model_PM25_2008_counties[[i]]$FIPS <- paste(model_PM25_2008_counties[[i]]$State,
+#                                               model_PM25_2008_counties[[i]]$County)
+#   model_PM25_2008_counties[[i]]$FIPS <- str_replace_all(model_PM25_2008_counties[[i]]$FIPS, " ", "")}
+# toc()
+# 
+# # PM for each county should be saved now in the previously empty list (each list item = one state)
+# model_PM25_2008_counties
 ```
 
 ###Read in county model PM2.5 data
 ```{r}
 # Read in model data into list of length 19 (# study years)
-
 model_PM25 <- list()
 DC_model_PM25 <- list()
 yr = 2000
