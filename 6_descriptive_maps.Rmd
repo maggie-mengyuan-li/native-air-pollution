@@ -21,7 +21,8 @@ summary(counties)
 
 #census
 census_counties <- census %>%
-  dplyr::rename(GEOID = County)
+  mutate(County = str_replace(County, "46113", "46102")) %>% 
+  dplyr::rename(GEOID = County) 
 census_counties$State <- substr(census_counties$GEOID, 0, 2)
 census_counties$State <- as.numeric(census_counties$State)
 census_counties <- census_counties %>% filter(State <= 56,
@@ -34,6 +35,7 @@ length(census_shp$GEOID) #excludes 1 county
 
 #cluster
 cluster_counties <- cluster %>%
+  mutate(County = str_replace(County, "46113", "46102")) %>% 
   dplyr::rename(GEOID = County)
 cluster_counties$State <- substr(cluster_counties$GEOID, 0, 2)
 cluster_counties$State <- as.numeric(as.character(cluster_counties$State))
@@ -48,7 +50,9 @@ length(cluster_counties$GEOID)
 length(cluster_shp$GEOID) 
 
 #reservation
-reservation_counties <- reservation %>% dplyr::rename(GEOID = County)
+reservation_counties <- reservation %>% 
+  mutate(County = str_replace(County, "46113", "46102")) %>% 
+  dplyr::rename(GEOID = County)
 reservation_counties$State <- substr(reservation_counties$GEOID, 0, 2)
 reservation_counties$State <- as.numeric(reservation_counties$State)
 reservation_counties <- reservation_counties %>% 
@@ -256,10 +260,11 @@ Old code for differentiating between monitors active for less than half or great
 #                    color = ~activeyrs_pal(agg_native_mon$active))
 # native_counties_map
 ```
+
 ### Map with just counties locations (no monitors)
 
 ```{r}
-# some fancy schmancy code to denote specific colors/shapes for map and legend symbols
+# denote specific colors/shapes for map and legend symbols
 # different color polygons for the different county classifications and black points to symbolize locations of monitors
 colors <- c("#8dd3c7",  "#ffffb3", "#fb8072")
 labels <- c("Native Census Population >5% County", 
@@ -323,12 +328,12 @@ browsable(
 ### Show overlap of AI county definitions (data visualized in venn diagram in paper to double check with)
 ```{r}
 # Non-restricted for each definition (main analysis)
-census_counties <- native_census_counties %>% 
-  dplyr::select(County) 
-cluster_counties <- native_rural_counties %>% 
-  dplyr::select(County) 
+census_counties <- census_counties %>%
+  dplyr::select(GEOID)
+cluster_counties <- cluster_counties %>%
+  dplyr::select(GEOID)
 reservation_counties <- reservation_counties %>%
-  dplyr::select(County)
+  dplyr::select(GEOID)
 
 #three-way overlap
 all_overlap <- cluster_counties %>% 
@@ -367,5 +372,252 @@ reservation_only <- reservation_counties %>%
   anti_join(census_reservation) %>%
   anti_join(all_overlap)
 nrow(reservation_only)
+```
+
+### Convert overlap counties to shp and only ___ classifications
+
+```{r}
+# Cluster x Census
+cluster_census_counties <- cluster_census
+cluster_census_counties$State <- substr(cluster_census_counties$GEOID, 0, 2)
+cluster_census_counties$State <- as.numeric(cluster_census_counties$State)
+cluster_census_counties <- cluster_census_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+cluster_census_counties
+cluster_census_shp <- merge(counties, cluster_census_counties, 
+                    by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(cluster_census_counties$GEOID)
+length(cluster_census_shp$GEOID)
+
+# Cluster x Reservation -- dont run b/c no counties
+# cluster_reservation_counties <- cluster_reservation
+# cluster_reservation_counties$State <- substr(cluster_reservation_counties$GEOID, 0, 2)
+# cluster_reservation_counties$State <- as.numeric(cluster_reservation_counties$State)
+# cluster_reservation_counties <- cluster_reservation_counties %>% filter(State <= 56,
+#                                               State != 2,
+#                                               State != 15)
+# cluster_reservation_counties
+# cluster_reservation_shp <- merge(counties, cluster_reservation_counties, 
+#                     by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+# length(cluster_reservation_counties$GEOID)
+# length(cluster_reservation_shp$GEOID)
+
+# Census x Reservation
+census_reservation_counties <- census_reservation
+census_reservation_counties$State <- substr(census_reservation_counties$GEOID, 0, 2)
+census_reservation_counties$State <- as.numeric(census_reservation_counties$State)
+census_reservation_counties <- census_reservation_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+census_reservation_counties
+census_reservation_shp <- merge(counties, census_reservation_counties, 
+                    by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(census_reservation_counties$GEOID)
+length(census_reservation_shp$GEOID)
+
+# All overlap
+all_overlap_counties <- all_overlap
+all_overlap_counties$State <- substr(all_overlap_counties$GEOID, 0, 2)
+all_overlap_counties$State <- as.numeric(all_overlap_counties$State)
+all_overlap_counties <- all_overlap_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+all_overlap_counties
+all_overlap_shp <- merge(counties, all_overlap_counties, 
+                    by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(all_overlap_counties$GEOID)
+length(all_overlap_shp$GEOID)
+
+# Only census
+census_only_counties <- census_only
+census_only_counties$State <- substr(census_only_counties$GEOID, 0, 2)
+census_only_counties$State <- as.numeric(census_only_counties$State)
+census_only_counties <- census_only_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+census_only_counties
+census_only_shp <- merge(counties, census_only_counties, 
+                    by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(census_only_counties$GEOID)
+length(census_only_shp$GEOID)
+
+# Tribal entity only
+reservation_only_counties <- reservation_only
+reservation_only_counties$State <- substr(reservation_only_counties$GEOID, 0, 2)
+reservation_only_counties$State <- as.numeric(reservation_only_counties$State)
+reservation_only_counties <- reservation_only_counties %>% filter(State <= 56,
+                                              State != 2,
+                                              State != 15)
+reservation_only_counties
+reservation_only_shp <- merge(counties, reservation_only_counties, 
+                    by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(reservation_only_counties$GEOID)
+length(reservation_only_shp$GEOID)
+
+```
+
+### Map all county types and overlaps
+
+```{r}
+# denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#56B4E9",
+            "#CC79A7",
+            "#0072B2",
+            "#009E73",
+            "#E69F00")
+labels <- c("AI/AN County Census Population >5% Only", 
+            "County Area >20% within Fed Recognized Tribal Entity Only",
+            "Both Census and Tribal Entity Classified Only",
+            "Both Census and Rural Cluster Classified Only",
+            "Fits All Classification Schemes")
+sizes <- c(10, 10, 10)
+shapes <- c("square", "square", "square", "square", "square")
+borders <- colors
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:5px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 6px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, 
+                           labels = legend_labels, 
+                           opacity = opacity, 
+                           title = title,
+                           position = "bottomleft"))}
+all_class_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = census_only_shp, color = "#56B4E9",
+              fillOpacity = 0.8, weight = 3) %>%
+  # addPolygons(data = cluster_shp, color = "#ffffb3",
+  #             fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = reservation_only_shp, color = "#CC79A7",
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = cluster_census_shp, color = "#009E73",
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = census_reservation_shp, color = "#0072B2",
+              fillOpacity = 0.8, weight = 3) %>%
+  addPolygons(data = all_overlap_shp, color = "#E69F00",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "American Indian-Populated Counties 
+                  by Classification")
+
+##Adjust size of legend
+browsable(
+ tagList(
+    list(
+       tags$head(
+          tags$style(
+             ".leaflet .legend {
+               line-height: 16px;
+               font-size: 16px;
+               }",
+            ".leaflet .legend i{
+              width: 16px;
+              height: 16px;
+               }"
+          )
+       ),
+     all_class_map)))
+
+```
+
+### Try pattern scheme using ggmap
+```{r}
+overlap_counties_df = all_overlap %>% 
+  mutate(type = "all") %>% 
+  rbind(cluster_census %>% 
+          mutate(type = "cluster_census")) %>% 
+  rbind(census_reservation %>% 
+          mutate(type = "census_reservation")) %>% 
+  rbind(census_only %>% 
+          mutate(type = "census_only")) %>% 
+  rbind(reservation_only %>% 
+          mutate(type = "reservation_only"))
+
+library(maps)
+library(ggpattern)
+library(tigris)
+
+data(fips_codes) 
+fips_codes = fips_codes %>% 
+  mutate(subregion = tolower(word(county, start = 1L))) %>% 
+  unite("GEOID", c(state_code, county_code), sep = "", remove = F) %>% 
+  filter(state_code <= 56, state_code != "02", state_code != 15, 
+         fips != "46113")
+fips_codes
+all_counties
+anti_join(fips_codes,
+          all_counties)
+crimes <- data.frame(state = tolower(rownames(USArrests)), USArrests)
+crimes
+states_map <- map_data("state")
+states_map
+
+counties_map <- map_data("county")
+counties_map %>% inner_join(fips_codes %>% 
+                             dplyr::select(subregion, GEOID))
+
+pattern_overlap <- ggplot(overlap_counties_df, aes(map_id = type)) +
+    geom_map_pattern(
+      map = counties_map,
+      aes(
+        pattern_type = type
+      ),
+      pattern              = 'magick',
+      pattern_fill         = 'black',
+      pattern_aspect_ratio = 1.75,
+      fill                 = 'white',
+      colour               = 'black',
+    ) +
+    expand_limits(x = states_map$long, y = states_map$lat) +
+    coord_map() +
+    theme_bw(18) +
+    labs(title = "ggpattern::geom_map_pattern()") + 
+  labs(
+    title = "ggpattern::geom_map_pattern()",
+    subtitle = "pattern = 'magick'"
+  ) + 
+    scale_pattern_type_discrete(choices = gridpattern::names_magick) +
+    theme(legend.position = 'none')
+
+pattern_overlap
+
+p <- ggplot(crimes, aes(map_id = state)) +
+    geom_map_pattern(
+      map = states_map,
+      aes(
+        pattern_type = state
+      ),
+      pattern              = 'magick',
+      pattern_fill         = 'black',
+      pattern_aspect_ratio = 1.75,
+      fill                 = 'white',
+      colour               = 'black',
+    ) +
+    expand_limits(x = states_map$long, y = states_map$lat) +
+    coord_map() +
+    theme_bw(18) +
+    labs(title = "ggpattern::geom_map_pattern()") + 
+  labs(
+    title = "ggpattern::geom_map_pattern()",
+    subtitle = "pattern = 'magick'"
+  ) + 
+    scale_pattern_type_discrete(choices = gridpattern::names_magick) +
+    theme(legend.position = 'none')
+
+p
 ```
 

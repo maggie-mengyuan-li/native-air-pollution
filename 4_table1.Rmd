@@ -11,6 +11,7 @@ library(xtable)
 require(data.table) #need to convert for latex export
 ```
 
+
 ## Table 1: Descriptive Statistics by County for all counties, all counties with monitors, rural counties, rural counties with monitors (AI/Non-AI)
 
 Characteristics include: number of counties, mean annual PM2.5 monitor count, mean monitor PM2.5 concentration, mean model PM2.5 concentration, mean population density, mean household income.
@@ -19,12 +20,41 @@ I created two tables, one with all counties and counties with monitors (first ch
 
 August 4 update: fixed the mean annual concentrations by monitor and SD
 
+September 9 update: added ADI descriptive statistics
+
+```{r ADI}
+adi_blckgrp = read_delim("Data/adi-download/US_2015_ADI_Census Block Group_v3.1.txt",
+                         delim = ",")
+substr(adi_blckgrp$FIPS, 1, 5)
+
+adi_county = adi_blckgrp %>% 
+  mutate(County = substr(FIPS, 1, 5),
+         ADI_NATRANK = as.numeric(ADI_NATRANK), 
+         ADI_STATERNK = as.numeric(ADI_STATERNK)) %>% 
+  dplyr::select(County, ADI_NATRANK, ADI_STATERNK) %>% 
+  group_by(County) %>% 
+  summarize(mean_nat_adi = mean(ADI_NATRANK, na.rm = TRUE),
+            mean_state_adi = mean(ADI_STATERNK, na.rm = TRUE))
+```
+
+
 ### All Counties 
 ```{r}
 # First table has columns for all counties and all counties with monitors
 # Join 
-all_native_counties_full <- inner_join(all_native_counties, covariates)
-all_general_counties_full <- inner_join(all_general_counties, covariates)
+all_native_counties_full <- inner_join(all_native_counties, covariates) %>% 
+  inner_join(adi_county)
+all_general_counties_full <- inner_join(all_general_counties, covariates) %>% 
+  filter(!str_detect(County, "51515")) %>% 
+  inner_join(adi_county)
+
+all_avgmon_full = all_avgmon_full %>% 
+  inner_join(adi_county %>% 
+               mutate(County = str_replace(County, "46102", "46113"))) %>% 
+  filter(!str_detect(County, "51515")) # drop to have 3108 counties
+
+all_native_counties_full
+all_general_counties_full
 #Number of counties
 num_counties_row_main <- data.frame(nrow(all_native_counties_full),
                                     nrow(all_general_counties_full),
@@ -71,7 +101,7 @@ names(sd_PM25_row_main) <- names(num_counties_row_main)
 
 #Mean Annual Concentrations by Model & SD
   # First, obtain average model data
-avg_modelPM25 <- spread(model_PM25, key = Year, value = PM25)
+avg_modelPM25 <- spread(model_PM25, key = year, value = PM25)
 
 
 avg_modelPM25$avg_modelpm <- rowMeans(avg_modelPM25[c(seq(11,29))], na.rm = TRUE) #get mean of all study years 2000-2018
@@ -104,6 +134,7 @@ sd_modelPM25_row_main <- data.frame(sd(native_modelexp$avg_modelpm),
 names(sd_modelPM25_row_main) <- names(num_counties_row_main) 
 
 #covariate mean and SD rows
+
   # population density
 popdensity_row_main <- data.frame(mean(native_avgmon_full$pop_density),
                                   mean(general_avgmon_full$pop_density),
@@ -130,6 +161,19 @@ sd_hhinc_main <- data.frame(sd(native_avgmon_full$hh_income),
 names(sd_hhinc_main) <- names(num_counties_row_main) 
 
 
+  # ADI
+adi_row_main_25 <- data.frame(quantile(native_avgmon_full$mean_nat_adi, 0.25, na.rm = T),
+                                  quantile(general_avgmon_full$mean_nat_adi, 0.25, na.rm = T),
+                                  quantile(native_monitors_avgmon_full$mean_nat_adi, 0.25, na.rm = T),
+                                  quantile(general_monitors_avgmon_full$mean_nat_adi, 0.25, na.rm = T))
+names(adi_row_main_25) <- names(num_counties_row_main) 
+
+adi_main_75 <- data.frame(quantile(native_avgmon_full$mean_nat_adi, 0.75, na.rm = T),
+                                  quantile(general_avgmon_full$mean_nat_adi, 0.75, na.rm = T),
+                                  quantile(native_monitors_avgmon_full$mean_nat_adi, 0.75, na.rm = T),
+                                  quantile(general_monitors_avgmon_full$mean_nat_adi, 0.75, na.rm = T))
+names(adi_main_75) <- names(num_counties_row_main) 
+
 #round mean rows
 num_counties_row_main[] <- lapply(num_counties_row_main,as.integer)
 mean_mon_row_main <- format(round(mean_mon_row_main, 1), nsmall = 1)
@@ -137,6 +181,7 @@ avg_PM25_row_main <- format(round(avg_PM25_row_main, 1), nsmall = 1)
 avg_modelPM25_row_main <-format(round(avg_modelPM25_row_main, 1), nsmall = 1)
 popdensity_row_main[] <- lapply(popdensity_row_main,as.integer)
 hhinc_row_main[] <- lapply(hhinc_row_main,as.integer)
+adi_row_main_25[] <- lapply(adi_row_main_25,as.integer)
 
 #round sd rows
 sd_mon_row_main <- format(round(sd_mon_row_main, 1), nsmall = 1)
@@ -144,12 +189,7 @@ sd_PM25_row_main <- format(round(sd_PM25_row_main, 1), nsmall = 1)
 sd_modelPM25_row_main <-format(round(sd_modelPM25_row_main, 1), nsmall = 1)
 sd_popden_main[] <- lapply(sd_popden_main, as.integer)
 sd_hhinc_main[] <- lapply(sd_hhinc_main, as.integer)
-
-
-sd_mon_row_main
-sd_PM25_row_main
-sd_popden_main
-sd_hhinc_main
+adi_main_75[] <- lapply(adi_main_75, as.integer)
 
 #make list of rows
 rows_list_main <- list(num_counties_row_main,
@@ -157,7 +197,8 @@ rows_list_main <- list(num_counties_row_main,
       avg_PM25_row_main,
       avg_modelPM25_row_main,
       popdensity_row_main,
-      hhinc_row_main)
+      hhinc_row_main,
+      adi_row_main_25)
 rows_list_main
 #rbind all rows together
 table_1_main <- do.call(rbind, rows_list_main)
@@ -178,7 +219,8 @@ row_list_sd <- list(sd_mon_row_main,
                     sd_PM25_row_main,
                     sd_modelPM25_row_main,
                     sd_popden_main,
-                    sd_hhinc_main)
+                    sd_hhinc_main,
+                    adi_main_75)
 table_1_sd <- do.call(rbind,row_list_sd)
 row.names(table_1_sd) <- c("SD Mean Monitor Count",
                            "SD Monitor PM2.5",
@@ -189,6 +231,7 @@ test_sd <- setDT(table_1_sd)
 main_table_sd <- xtable(test_sd)
 main_table_sd
 ```
+
 
 ### Rural Counties
 Note: I use the same variable names as above in intermediate steps for calculating each of the characteristics (overwriting values), so please run each chunk in their entirety to ensure the output tables
@@ -302,6 +345,18 @@ sd_hhinc_main <- data.frame(sd(rural_native_avgmon$hh_income),
                              sd(rural_general_monitors_avgmon$hh_income))
 names(sd_hhinc_main) <- names(num_counties_row_main) 
 
+  # ADI
+adi_row_rural_25 <- data.frame(quantile(rural_native_avgmon$mean_nat_adi, 0.25, na.rm = T),
+                                  quantile(rural_general_avgmon$mean_nat_adi, 0.25, na.rm = T),
+                                  quantile(rural_native_monitors_avgmon$mean_nat_adi, 0.25, na.rm = T),
+                                  quantile(rural_general_monitors_avgmon$mean_nat_adi, 0.25, na.rm = T))
+names(adi_row_rural_25) <- names(num_counties_row_main) 
+
+adi_rural_75 <- data.frame(quantile(rural_native_avgmon$mean_nat_adi, 0.75, na.rm = T),
+                                  quantile(rural_general_avgmon$mean_nat_adi, 0.75, na.rm = T),
+                                  quantile(rural_native_monitors_avgmon$mean_nat_adi, 0.75, na.rm = T),
+                                  quantile(rural_general_monitors_avgmon$mean_nat_adi, 0.75, na.rm = T))
+names(adi_rural_75) <- names(num_counties_row_main) 
 
 #round mean rows first
 num_counties_row_main[] <- lapply(num_counties_row_main,as.integer)
@@ -362,4 +417,175 @@ main_table_sd_rural <- xtable(table1_sd_rural)
 main_table_sd_rural
 ```
 
-I manually joined the two (all counties and rural counties) and just messed with the formatting in LaTeX a bit to make it all into one table. :)
+### 7/28/21 REVISION: ADD ROW FOR AVG % AI IN EACH COUNTY TYPE
+
+```{r ALL COUNTIES}
+native_census
+prop_ai_county = all_native_counties %>% 
+  rbind(all_general_counties) %>% 
+  left_join(native_census) 
+
+# Avg % AI for Non-AI counties
+prop_ai_county %>% 
+  filter(county_type == 0) %>% 
+  pull(native_prop) %>% 
+  mean()
+
+# SD % AI for Non-AI counties
+prop_ai_county %>% 
+  filter(county_type == 0) %>% 
+  pull(native_prop) %>% 
+  sd()
+
+# Avg % AI for AI counties
+prop_ai_county %>% 
+  filter(county_type == 1) %>% 
+  pull(native_prop) %>% 
+  mean()
+
+# SD % AI for AI counties
+prop_ai_county %>% 
+  filter(county_type == 1) %>% 
+  pull(native_prop) %>% 
+  sd()
+
+# For counties with monitors
+# Avg % AI for AI counties
+native_avg_exp %>% 
+  pull(native_prop) %>% 
+  mean()
+
+#SD % AI for AI counties
+native_avg_exp %>% 
+  pull(native_prop) %>% 
+  sd() 
+
+# Avg % AI for non-AI counties
+general_avg_exp  %>% 
+  pull(native_prop) %>% 
+  mean()
+#SD % AI for non-AI counties
+general_avg_exp  %>% 
+  pull(native_prop) %>% 
+  sd() 
+```
+
+```{r RURAL COUNTIES}
+# all rural counties
+rural_native %>% 
+  pull(native_prop) %>% 
+  mean()
+
+rural_native %>% 
+  pull(native_prop) %>% 
+  sd()
+
+rural_general %>% 
+  pull(native_prop) %>% 
+  mean()
+
+rural_general %>% 
+  pull(native_prop) %>% 
+  sd()
+
+# only counties with monitors
+rural_native_avgexp %>% 
+  pull(native_prop) %>% 
+  mean()
+
+rural_native_avgexp %>% 
+  pull(native_prop) %>% 
+  sd()
+
+rural_general_avgexp %>% 
+  pull(native_prop) %>% 
+  mean()
+
+rural_general_avgexp %>% 
+  pull(native_prop) %>% 
+  sd()
+```
+
+### 7/30/21 Revision: Correlation Matrix
+```{r}
+acs5 <- load_variables(2010, "acs5", cache = TRUE)
+
+all_native_counties_full
+all_general_counties_full
+all_counties_full = rbind(all_native_counties_full, all_general_counties_full)
+all_counties_full
+
+## Estimate!!Total!!Below 100 percent of the poverty level
+## Variable name: B06012_002
+
+poverty_acs = get_acs(geography = "county",
+                          variables = "B06012_002",
+                          year = 2010) %>% 
+  rename(County = GEOID,
+         poverty_count = estimate) %>% 
+  dplyr::select(County, poverty_count)
+
+vehicle_acs = get_acs(geography = "county",
+                          variables = "B08201_002",
+                          year = 2010) %>% 
+  rename(County = GEOID) %>% 
+  rename(no_v_count = estimate) %>% 
+  dplyr::select(County, no_v_count)
+
+
+all_counties_full = all_counties_full %>% 
+  inner_join(poverty_acs) %>% 
+  inner_join(vehicle_acs) %>% 
+  mutate(total_pop = as.numeric(total_pop),
+         poverty_rate = poverty_count/total_pop,
+         no_v_rate = no_v_count/total_pop) 
+
+### Calculate correlations
+
+## join all dfs for correlation matrix
+data_cormat <- all_counties_full %>% 
+  dplyr::select(-County, -total_pop, -State, -EPA_region, -Climate_Zone) %>% 
+  mutate(land_use = as.numeric(land_use))
+data_cormat
+
+v.matrix <- round(cor(data_cormat, use = "pairwise.complete.obs", 
+                    method = c("spearman")), 2)
+
+v.matrix[upper.tri(v.matrix)] <- NA          
+
+viz.cormat <- reshape2::melt(v.matrix, na.rm = TRUE) %>% 
+  dplyr::rename(Correlation = value) 
+
+ v.matrix
+ 
+### Visualization
+
+viz.cormat %>%
+    ggplot(aes(Var1, Var2, fill = Correlation)) +
+ geom_tile(color = "white") +
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                      midpoint = 0.5,  space = "Lab", 
+                      name = "Spearman\nCorrelation") +
+  geom_text(aes(Var1, Var2, label = Correlation), color = "black", size = 5) +
+#  theme_minimal(base_size = 14) + # minimal theme
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, size = 14, hjust = 1),
+    axis.text.y = element_text(vjust = 1, size = 14, hjust = 1),
+  #axis.title.x = element_text(size = 15),
+  #axis.title.y = element_text(size = 15)
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  #legend.justification = c(1, 0),
+  #legend.position = c(0.45, 0.8),
+  legend.direction = "horizontal",
+  legend.text = element_text(size = 14),
+  legend.title = element_text(size = 14)) 
+#  guides(fill = guide_colorbar(barwidth = 8, barheight = 1.5,
+               # title.position = "top", title.hjust = 0.5))
+  
+
+```

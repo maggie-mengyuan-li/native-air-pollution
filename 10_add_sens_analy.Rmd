@@ -1,0 +1,985 @@
+---
+title: 'Additional sensitivity analyses: RUCA, Intersection of AI definitions'
+author: "Maggie Li (ml4424)"
+date: "8/12/2021"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+## Plot Model 4 InterX additionally adj for NOAA climate region, only modeled PM2.5
+```{r}
+# MODEL PM2.5 Full w/ InterX with climate as variable
+modelpm_lme_climate_interx <- lmer(annual_mean_all ~ county_type + year +
+                  popd_q + 
+                  hhinc_q +
+                  Climate_Zone +
+                  county_type*year +
+                  (1|State/County),
+                data = model_PM_climate, REML=FALSE)
+summary(modelpm_lme_climate_interx)
+
+# vcov matrix
+native_yr_vcov <- vcov(modelpm_lme_climate_interx)[c(2,seq(47,64)), c(2,seq(47,64))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+
+sd_vector <- sqrt(var_vector)
+sd_vector
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all <- data.frame()
+pm_decline_model_all[1,1] <- summary(modelpm_lme_climate_interx)$coefficients[2,1]
+pm_decline_model_all[1,2] <- summary(modelpm_lme_climate_interx)$coefficients[2,1] - 1.96*sd_vector[1]
+pm_decline_model_all[1,3] <- summary(modelpm_lme_climate_interx)$coefficients[2,1] + 1.96*sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 47
+for (i in 2:19){
+  pm_decline_model_all[i,1] <- summary(modelpm_lme_climate_interx)$coefficients[2,1]+
+    summary(modelpm_lme_climate_interx)$coefficients[yr_ct,1]
+  pm_decline_model_all[i,2] <- summary(modelpm_lme_climate_interx)$coefficients[2,1]+
+    summary(modelpm_lme_climate_interx)$coefficients[yr_ct,1] - 1.96*sd_vector[i]
+  pm_decline_model_all[i,3] <- summary(modelpm_lme_climate_interx)$coefficients[2,1]+
+    summary(modelpm_lme_climate_interx)$coefficients[yr_ct,1] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all$year <- seq(2000, 2018)
+pm_decline_model_all
+
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+model_climate_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        # axis.title.x = element_blank(),
+        # axis.title.y = element_blank()
+        ) +
+  guides(x =  guide_axis(angle = 45)) +
+  scale_x_continuous(breaks = seq(2000,2018,1), expand = c(0, 0)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+model_climate_interx_plot 
+
+# 12/14 for paper
+grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+
+# Plot and save
+model_climate_interx_plot + annotation_custom(grob)
+ggsave("figures/updated_12.7/model_interx_climate.png")
+
+# save without grob
+model_climate_interx_plot
+ggsave("presentations/layering_trends/model_interx_climate.png")
+
+```
+
+## Plot NCHS Rural Counties
+
+```{r}
+# sort out rural NCHS counties
+nchs <- read_csv("Data/urban_rural_counties_2013.csv") %>% 
+  janitor::clean_names() %>% 
+  filter(!str_detect(County, "^02"),
+         !str_detect(County, "^15"),
+         !str_detect(County, "^72"),
+         !str_detect(County, "51515"),
+         !str_detect(County, "46113"),
+         !str_detect(County, "51560")) %>% # just gets absorbed into another county 51005
+  dplyr::rename(land_use = x2013_code) 
+nchs$GEOID <- formatC(nchs$fips_code, width = 5, format = "d", flag = "0")
+
+nchs_rural = nchs %>% 
+  dplyr::select(GEOID, land_use) %>% 
+  filter(land_use >= 5)
+nchs_rural 
+
+# read in sf counties file
+library(tigris)
+counties_sf = counties()
+
+# merge nchs county list with sf
+nchs_sf = counties_sf %>% 
+  merge(nchs_rural, by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+anti_join(nchs_rural, nchs_sf) # check
+
+# reproject to map
+nchs_sf = st_transform(nchs_sf, "+proj=longlat +datum=WGS84")
+
+# denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#8dd3c7")
+labels <- c("Rural Counties")
+sizes <- c(10)
+shapes <- c("square")
+borders <- c("#8dd3c7")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, 
+                           labels = legend_labels, 
+                           opacity = opacity, 
+                           title = title,
+                           position = "topright"))}
+nchs_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = nchs_sf, color = "#8dd3c7",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "NCHS Rural Classified Counties")
+
+##Adjust size of legend
+browsable(
+ tagList(
+    list(
+       tags$head(
+          tags$style(
+             ".leaflet .legend {
+               line-height: 15px;
+               font-size: 15px;
+               }",
+            ".leaflet .legend i{
+              width: 15px;
+              height: 15px;
+               }"
+          )
+       ),
+     nchs_map)))
+```
+
+
+## RUCA Rural/Urban Classification
+
+```{r write function to get RUCA codes}
+ruca = read_csv("Data/RUCA/ruca2010revised.csv") %>% 
+  janitor::clean_names()
+ruca
+
+# Create the mode function
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+ruca = ruca %>% 
+  group_by(state_county_fips_code) %>% 
+  summarize(most_common_ruca = getmode(primary_ruca_code_2010)) %>% # get most common ruca code by county
+  mutate(ruca_rural = case_when(
+    most_common_ruca < 4 ~ 0,
+    most_common_ruca >= 4 ~ 1 
+  )) %>% ## create binary ruca rural variable in new column (1 = yes rural) 
+  rename(County = state_county_fips_code)
+ruca
+```
+### Plot RUCA Rural counties
+
+```{r}
+ruca_rural = ruca %>% 
+  filter(ruca_rural == 1,
+         !str_detect(County, "^02"),
+         !str_detect(County, "^15"),
+         !str_detect(County, "^72"),
+         !str_detect(County, "51515")) %>% #it's because Bedford City was absorbed into Bedford County in 2015 so we drop this
+  dplyr::rename(GEOID = County) %>% 
+  mutate(GEOID = str_replace(GEOID, "46113", "46102"))
+ruca_rural
+
+# join shp file with ruca list
+ruca_rural_counties <- counties_sf %>% 
+  merge(ruca_rural, by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+length(ruca_rural_counties$GEOID)
+length(ruca_rural_counties$GEOID) #excludes 1 county
+
+# Check why counties were dropped; 
+anti_join(ruca_rural,ruca_rural_counties)
+
+# reproject to map
+ruca_rural_counties = st_transform(ruca_rural_counties, "+proj=longlat +datum=WGS84")
+
+# denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#fb8072")
+labels <- c("Rural Counties")
+sizes <- c(10)
+shapes <- c("square")
+borders <- c("#fb8072")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, 
+                           labels = legend_labels, 
+                           opacity = opacity, 
+                           title = title,
+                           position = "topright"))}
+RUCA_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = ruca_rural_counties, color = "#fb8072",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "RUCA Rural Classified Counties")
+
+##Adjust size of legend
+browsable(
+ tagList(
+    list(
+       tags$head(
+          tags$style(
+             ".leaflet .legend {
+               line-height: 15px;
+               font-size: 15px;
+               }",
+            ".leaflet .legend i{
+              width: 15px;
+              height: 15px;
+               }"
+          )
+       ),
+     RUCA_map)))
+
+
+```
+
+## Differences between RUCA and NCHS; map these too
+```{r NCHS counties that were not in the RUCA counties list}
+nchs_not_ruca = nchs_rural %>% anti_join(ruca_rural, "GEOID")
+# merge nchs county list with sf
+nchs_not_ruca_sf = counties_sf %>% 
+  merge(nchs_not_ruca, by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+
+# reproject to map
+nchs_not_ruca_sf = st_transform(nchs_not_ruca_sf, "+proj=longlat +datum=WGS84")
+
+# denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#8dd3c7")
+labels <- c("Rural Counties")
+sizes <- c(10)
+shapes <- c("square")
+borders <- c("#8dd3c7")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, 
+                           labels = legend_labels, 
+                           opacity = opacity, 
+                           title = title,
+                           position = "topright"))}
+nchs_not_ruca_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = nchs_not_ruca_sf, color = "#8dd3c7",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "NCHS Rural Counties (NOT RUCA)")
+
+##Adjust size of legend
+browsable(
+ tagList(
+    list(
+       tags$head(
+          tags$style(
+             ".leaflet .legend {
+               line-height: 15px;
+               font-size: 15px;
+               }",
+            ".leaflet .legend i{
+              width: 15px;
+              height: 15px;
+               }"
+          )
+       ),
+     nchs_not_ruca_map)))
+write_csv(nchs_not_ruca, "intermediate/nchs_not_ruca.csv")
+```
+
+```{r RUCA counties that were not in the NCHS counties list}
+ruca_not_nchs = ruca_rural %>% anti_join(nchs_rural, "GEOID")
+# merge nchs county list with sf
+ruca_not_nchs_sf = counties_sf %>% 
+  merge(ruca_not_nchs, by = 'GEOID', all = FALSE, duplicateGeoms = TRUE)
+
+# reproject to map
+ruca_not_nchs_sf = st_transform(ruca_not_nchs_sf, "+proj=longlat +datum=WGS84")
+
+# denote specific colors/shapes for map and legend symbols
+# different color polygons for the different county classifications and black points to symbolize locations of monitors
+colors <- c("#fb8072")
+labels <- c("Rural Counties")
+sizes <- c(10)
+shapes <- c("square")
+borders <- c("#fb8072")
+addLegendCustom <- function(map, colors, labels, sizes, shapes, borders, opacity = 0.8, title){
+          make_shapes <- function(colors, sizes, borders, shapes) {
+              shapes <- gsub("circle", "50%", shapes)
+              shapes <- gsub("square", "0%", shapes)
+              paste0(colors, "; width:", sizes, "px; height:", sizes, 
+                     "px; border:3px solid ", borders, "; border-radius:", shapes)
+          }
+          make_labels <- function(sizes, labels) {
+              paste0("<div style='display: inline-block;height: ", 
+                     sizes, "px;margin-top: 4px;line-height: ", 
+                     sizes, "px;'>", labels, "</div>")
+          }
+
+          legend_colors <- make_shapes(colors, sizes, borders, shapes)
+          legend_labels <- make_labels(sizes, labels)
+
+          return(addLegend(map, colors = legend_colors, 
+                           labels = legend_labels, 
+                           opacity = opacity, 
+                           title = title,
+                           position = "topright"))}
+ruca_not_nchs_map <- leaflet() %>%
+  addProviderTiles("CartoDB.PositronNoLabels") %>%
+  addPolygons(data = ruca_not_nchs_sf, color = "#fb8072",
+              fillOpacity = 0.8, weight = 3) %>%
+  addLegendCustom(colors, labels, sizes, shapes, borders,
+                  title = "RUCA Rural Counties (NOT NCHS)")
+
+##Adjust size of legend
+browsable(
+ tagList(
+    list(
+       tags$head(
+          tags$style(
+             ".leaflet .legend {
+               line-height: 15px;
+               font-size: 15px;
+               }",
+            ".leaflet .legend i{
+              width: 15px;
+              height: 15px;
+               }"
+          )
+       ),
+     ruca_not_nchs_map)))
+
+write_csv(ruca_not_nchs, "intermediate/ruca_not_nchs.csv")
+
+```
+
+
+## Running LMER with monitor and modeled data w/ RUCA codes
+```{r}
+### MONITOR ANALYSIS ###
+## Get RUCA rural counties
+ruca_rural_monitors = all_ctyear_exp %>% 
+  inner_join(ruca) %>% 
+  filter(ruca_rural == 1)
+ruca_rural_monitors
+
+### MODELED ANALYSIS ###
+ruca_rural_modeled = model_PM25 %>% 
+  inner_join(ruca) %>% 
+  filter(ruca_rural == 1)
+ruca_rural_modeled
+
+## No InterX
+monitor_ruca <- lmer(annual_mean_all ~ county_type + year +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/County),
+                  data = ruca_rural_monitors, REML=FALSE)
+
+model_ruca <- lmer(PM25 ~ county_type + year +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/County),
+                  data = ruca_rural_modeled, REML=FALSE)
+## InterX
+monitor_ruca_interx <- lmer(annual_mean_all ~ county_type*year +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/County),
+                  data = ruca_rural_monitors, REML=FALSE)
+
+model_ruca_interx <- lmer(PM25 ~ county_type*year +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/County),
+                  data = ruca_rural_modeled, REML=FALSE)
+
+summary(monitor_ruca)
+summary(model_ruca)
+
+summary(monitor_ruca_interx)
+summary(model_ruca_interx)
+```
+
+
+### InterX effect plot-Monitor
+```{r}
+# vcov matrix
+monitor_ruca_interx_vcov <- vcov(monitor_ruca_interx)[c(2,seq(35,52)), c(2,seq(35,52))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- monitor_ruca_interx_vcov[1,1]
+  var_vector[i] <- monitor_ruca_interx_vcov[1,1] + 
+    monitor_ruca_interx_vcov[i,i] + 2 * monitor_ruca_interx_vcov[i,1]
+}
+
+sd_vector <- sqrt(var_vector)
+
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_monitor_all_ruca <- data.frame()
+pm_decline_monitor_all_ruca[1,1] <- summary(monitor_ruca_interx)$coefficients[2,1]
+pm_decline_monitor_all_ruca[1,2] <- summary(monitor_ruca_interx)$coefficients[2,1] - 1.96*sd_vector[1]
+pm_decline_monitor_all_ruca[1,3] <- summary(monitor_ruca_interx)$coefficients[2,1] + 1.96*sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 35
+for (i in 2:19){
+  pm_decline_monitor_all_ruca[i,1] <- summary(monitor_ruca_interx)$coefficients[2,1]+
+    summary(monitor_ruca_interx)$coefficients[yr_ct,1]
+  pm_decline_monitor_all_ruca[i,2] <- summary(monitor_ruca_interx)$coefficients[2,1]+
+    summary(monitor_ruca_interx)$coefficients[yr_ct,1] - 1.96*sd_vector[i]
+  pm_decline_monitor_all_ruca[i,3] <- summary(monitor_ruca_interx)$coefficients[2,1]+
+    summary(monitor_ruca_interx)$coefficients[yr_ct,1] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_monitor_all_ruca) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_monitor_all_ruca$year <- seq(2000, 2018)
+pm_decline_monitor_all_ruca
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+ruca_monitor_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_monitor_all_ruca,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_monitor_all_ruca,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_monitor_all_ruca,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        # axis.title.x = element_blank(),
+        # axis.title.y = element_blank()
+        ) +
+  guides(x =  guide_axis(angle = 45)) +
+  scale_x_continuous(breaks = seq(2000,2018,1), expand = c(0, 0)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+ruca_monitor_interx_plot 
+
+# 12/14 for paper
+grob <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+
+# Plot and save
+ruca_monitor_interx_plot + annotation_custom(grob)
+ggsave("figures/updated_12.7/ruca_monitor_interx_plot.png")
+
+
+```
+
+
+### InterX effect plot-Model
+```{r}
+# vcov matrix
+model_ruca_interx_vcov <- vcov(model_ruca_interx)[c(2,seq(39,56)), c(2,seq(39,56))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- model_ruca_interx_vcov[1,1]
+  var_vector[i] <- model_ruca_interx_vcov[1,1] + 
+    model_ruca_interx_vcov[i,i] + 2 * model_ruca_interx_vcov[i,1]
+}
+
+sd_vector <- sqrt(var_vector)
+
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all_ruca <- data.frame()
+pm_decline_model_all_ruca[1,1] <- summary(model_ruca_interx)$coefficients[2,1]
+pm_decline_model_all_ruca[1,2] <- summary(model_ruca_interx)$coefficients[2,1] - 1.96*sd_vector[1]
+pm_decline_model_all_ruca[1,3] <- summary(model_ruca_interx)$coefficients[2,1] + 1.96*sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_all_ruca[i,1] <- summary(model_ruca_interx)$coefficients[2,1]+
+    summary(model_ruca_interx)$coefficients[yr_ct,1]
+  pm_decline_model_all_ruca[i,2] <- summary(model_ruca_interx)$coefficients[2,1]+
+    summary(model_ruca_interx)$coefficients[yr_ct,1] - 1.96*sd_vector[i]
+  pm_decline_model_all_ruca[i,3] <- summary(model_ruca_interx)$coefficients[2,1]+
+    summary(model_ruca_interx)$coefficients[yr_ct,1] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all_ruca) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all_ruca$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+ruca_model_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all_ruca,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all_ruca,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all_ruca,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        # axis.title.x = element_blank(),
+        # axis.title.y = element_blank()
+        ) +
+  guides(x =  guide_axis(angle = 45)) +
+  scale_x_continuous(breaks = seq(2000,2018,1), expand = c(0, 0)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+ruca_model_interx_plot 
+
+# 12/14 for paper
+grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+
+# Plot and save
+ruca_model_interx_plot + annotation_custom(grob)
+ggsave("figures/updated_12.7/ruca_model_interx_plot.png")
+
+```
+
+
+## Intersection of all three classifications--Main effects analysis only (no interX)
+```{r}
+all_overlap_vctr = all_overlap %>% pull(County)
+ai_intersect = model_lmer %>% 
+  mutate(county_type_intsct = case_when(
+    County %in% all_overlap_vctr ~ 1,
+    TRUE ~ 0
+  ))
+
+View(ai_intersect)
+
+# Run LMER (crude, partial, adjusted)
+summary(detrend_lmer_crude(model_lmer))
+summary(detrend_lmer_partial(model_lmer))
+summary(detrend_lmer_full(model_lmer))
+
+# model w/o interX
+modelpm_lme_intersect <- lmer(annual_mean_all ~ county_type_intsct + year +
+                  popd_q + 
+                  hhinc_q +
+                  (1|State/County),
+                data = ai_intersect, REML=FALSE)
+summary(modelpm_lme_intersect)
+
+# Full w/ InterX 
+modelpm_lme_interx_intersect <- lmer(annual_mean_all ~ county_type*year +
+                  popd_q + 
+                  hhinc_q  +
+                  (1|State/County),
+                data = ai_intersect, REML=FALSE)
+summary(modelpm_lme_interx_intersect)
+
+# Full w/ InterX with climate as variable
+modelpm_lme_climate_interx <- lmer(annual_mean_all ~ county_type*year +
+                  popd_q + 
+                  hhinc_q +
+                  Climate_Zone +
+                  (1|State/County),
+                data = model_PM_climate, REML=FALSE)
+summary(modelpm_lme_climate_interx)
+```
+
+## MODEL 4 w/o adjusting for population density and household income
+
+```{r monitor pm}
+monitor_interX_nocovariates <- lmer(annual_mean_all ~ county_type*year +
+                  (1|State/County),
+                data = all_ctyear_exp, REML=FALSE)
+
+native_yr_vcov <- vcov(monitor_interX_nocovariates)[c(2,seq(21,38)), c(2,seq(21,38))]
+
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+var_vector
+sd_vector <- sqrt(var_vector)
+length(sd_vector)
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_monitor_all <- data.frame()
+pm_decline_monitor_all[1,1] <- summary(monitor_interX_nocovariates)$coefficients[2,1]
+pm_decline_monitor_all[1,2] <- summary(monitor_interX_nocovariates)$coefficients[2,1] - 1.96*sd_vector[1]
+pm_decline_monitor_all[1,3] <- summary(monitor_interX_nocovariates)$coefficients[2,1] + 1.96*sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 21
+for (i in 2:19){
+  pm_decline_monitor_all[i,1] <- summary(monitor_interX_nocovariates)$coefficients[2,1]+
+    summary(monitor_interX_nocovariates)$coefficients[21,1]
+  
+  pm_decline_monitor_all[i,2] <- summary(monitor_interX_nocovariates)$coefficients[2,1]+
+    summary(monitor_interX_nocovariates)$coefficients[yr_ct,1] - 1.96*sd_vector[i]
+  
+  pm_decline_monitor_all[i,3] <- summary(monitor_interX_nocovariates)$coefficients[2,1]+
+    summary(monitor_interX_nocovariates)$coefficients[yr_ct,1] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+
+pm_decline_monitor_all
+
+colnames(pm_decline_monitor_all) <- c('estimate', 'cl_lower', 'cl_upper') # set col names
+
+pm_decline_monitor_all$year <- seq(2000, 2018) # column for year
+
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME; updated 12/14 to be consistent with Figure 3 layout (slanted x-axis label)
+monitor_interx_plot_nocovariates <- ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_monitor_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_monitor_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+  geom_line(data=pm_decline_monitor_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  # ylim(-2.4,1.3) +
+  labs(x = "Year",
+       y = expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")")),
+       fill = "County Type") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        axis.title.x=element_blank()) +
+  scale_x_continuous(breaks = seq(2000,2018,1)) +
+  guides(x =  guide_axis(angle = 45)) +
+  geom_hline(yintercept=0, linetype="solid", color = "red")
+monitor_interx_plot_nocovariates
+```
+
+```{r modeled PM}
+model_interX_nocovariates <- lmer(annual_mean_all ~ county_type*year +
+                  (1|State/County),
+                data = model_lmer, REML=FALSE)
+
+# vcov matrix
+native_yr_vcov <- vcov(model_interX_nocovariates)[c(2,seq(20,38)), c(2,seq(20,38))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+
+sd_vector <- sqrt(var_vector)
+sd_vector
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all <- data.frame()
+pm_decline_model_all[1,1] <- summary(model_interX_nocovariates)$coefficients[2,1]
+pm_decline_model_all[1,2] <- summary(model_interX_nocovariates)$coefficients[2,1] - 1.96*sd_vector[1]
+pm_decline_model_all[1,3] <- summary(model_interX_nocovariates)$coefficients[2,1] + 1.96*sd_vector[1]
+summary(model_interX_nocovariates)$coefficients[21,1]
+# fill in matrix thru loop for every following year
+yr_ct <- 21
+for (i in 2:19){
+  pm_decline_model_all[i,1] <- summary(model_interX_nocovariates)$coefficients[2,1]+
+    summary(model_interX_nocovariates)$coefficients[yr_ct,1]
+  pm_decline_model_all[i,2] <- summary(model_interX_nocovariates)$coefficients[2,1]+
+    summary(model_interX_nocovariates)$coefficients[yr_ct,1] - 1.96*sd_vector[i]
+  pm_decline_model_all[i,3] <- summary(model_interX_nocovariates)$coefficients[2,1]+
+    summary(model_interX_nocovariates)$coefficients[yr_ct,1] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all$year <- seq(2000, 2018)
+pm_decline_model_all
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+model_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        # axis.title.x = element_blank(),
+        # axis.title.y = element_blank()
+        ) +
+  guides(x =  guide_axis(angle = 45)) +
+  scale_x_continuous(breaks = seq(2000,2018,1), expand = c(0, 0)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+model_interx_plot 
+
+# # 12/14 for paper
+# grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
+#   gp=gpar(fontsize=30)))
+
+# Plot and save
+# model_interx_plot + annotation_custom(grob)
+ggsave("figures/updated_12.7/model_interx_no_covariates.png")
+
+```
+
+## Using ADI instead of household income
+
+```{r read in ADI file, join with model pm2.5 data}
+model_lmer
+adi_blckgrp = read_delim("Data/adi-download/US_2015_ADI_Census Block Group_v3.1.txt",
+                         delim = ",")
+substr(adi_blckgrp$FIPS, 1, 5)
+
+adi_county = adi_blckgrp %>% 
+  mutate(County = substr(FIPS, 1, 5),
+         ADI_NATRANK = as.numeric(ADI_NATRANK), 
+         ADI_STATERNK = as.numeric(ADI_STATERNK)) %>% 
+  dplyr::select(County, ADI_NATRANK, ADI_STATERNK) %>% 
+  group_by(County) %>% 
+  summarize(mean_nat_adi = mean(ADI_NATRANK, na.rm = TRUE),
+            mean_state_adi = mean(ADI_STATERNK, na.rm = TRUE))
+
+# join data
+model_adi = model_lmer %>% inner_join(adi_county)
+
+# get deciles for state and natl ADI
+model_adi$adi_state_q <- cut(model_adi$mean_state_adi, quantile(model_adi$mean_state_adi, seq(0,1,0.1), na.rm = T), include.lowest = TRUE)
+model_adi$adi_nat_q <- cut(model_adi$mean_nat_adi, quantile(model_adi$mean_nat_adi, seq(0,1,0.1), na.rm = T), include.lowest = TRUE)
+model_adi
+```
+
+```{r run models with adi}
+## MODEL 3 NO INTX
+### State ADI
+model_lmer_state_adi <- lmer(annual_mean_all ~ county_type + year +
+                  popd_q + 
+                  adi_state_q +
+                  (1|State/County),
+                data = model_adi, REML=FALSE)
+summary(model_lmer_state_adi)
+### Natl ADI
+model_lmer_nat_adi <- lmer(annual_mean_all ~ county_type + year +
+                  popd_q + 
+                  adi_nat_q +
+                  (1|State/County),
+                data = model_adi, REML=FALSE)
+summary(model_lmer_nat_adi)
+
+## MODEL 4 w/ INTX
+### State ADI
+model_lmer_state_adi_intx <- lmer(annual_mean_all ~ county_type * year +
+                  popd_q + 
+                  adi_state_q +
+                  (1|State/County),
+                data = model_adi, REML=FALSE)
+summary(model_lmer_state_adi_intx)
+### Natl ADI
+model_lmer_nat_adi_intx <- lmer(annual_mean_all ~ county_type * year +
+                  popd_q + 
+                  adi_nat_q +
+                  (1|State/County),
+                data = model_adi, REML=FALSE)
+summary(model_lmer_nat_adi_intx)
+```
+
+```{r plot natl adi}
+# vcov matrix
+native_yr_vcov <- vcov(model_lmer_nat_adi_intx)[c(2,seq(39,56)), c(2,seq(39,56))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+
+sd_vector <- sqrt(var_vector)
+sd_vector
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all <- data.frame()
+pm_decline_model_all[1,1] <- summary(model_lmer_nat_adi_intx)$coefficients[2,1]
+pm_decline_model_all[1,2] <- summary(model_lmer_nat_adi_intx)$coefficients[2,1] - 1.96*sd_vector[1]
+pm_decline_model_all[1,3] <- summary(model_lmer_nat_adi_intx)$coefficients[2,1] + 1.96*sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_all[i,1] <- summary(model_lmer_nat_adi_intx)$coefficients[2,1]+
+    summary(model_lmer_nat_adi_intx)$coefficients[yr_ct,1]
+  pm_decline_model_all[i,2] <- summary(model_lmer_nat_adi_intx)$coefficients[2,1]+
+    summary(model_lmer_nat_adi_intx)$coefficients[yr_ct,1] - 1.96*sd_vector[i]
+  pm_decline_model_all[i,3] <- summary(model_lmer_nat_adi_intx)$coefficients[2,1]+
+    summary(model_lmer_nat_adi_intx)$coefficients[yr_ct,1] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all$year <- seq(2000, 2018)
+pm_decline_model_all
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+model_adi_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        # axis.title.x = element_blank(),
+        # axis.title.y = element_blank()
+        ) +
+  guides(x =  guide_axis(angle = 45)) +
+  scale_x_continuous(breaks = seq(2000,2018,1), expand = c(0, 0)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+model_adi_interx_plot 
+
+# 12/14 for paper
+grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
+  gp=gpar(fontsize=30)))
+
+# save without grob
+model_adi_interx_plot
+ggsave("presentations/layering_trends/model_adi_interx.png")
+```
+
+### Run Model 4 with Main Analysis Counties also including counties with any overlap with fed rec tribal entity (run 8_supplement.Rmd first)
+```{r}
+main_analysis_counties_sens = main_analysis_counties_sens %>% 
+  rename(county_type_sens = county_type)
+main_analysis_counties_sens
+model_lmer_all_anyoverlap = model_lmer %>% inner_join(main_analysis_counties_sens)
+model_lmer_all_anyoverlap
+  
+# RUN MODEL 4
+anyoverlap_interx_modeled <- detrend_lmer_full_catyr_intx(model_lmer_all_anyoverlap)
+
+# vcov matrix
+native_yr_vcov <- vcov(anyoverlap_interx_modeled)[c(2,seq(39,56)), c(2,seq(39,56))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+
+sd_vector <- sqrt(var_vector)
+sd_vector
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all <- data.frame()
+pm_decline_model_all[1,1] <- summary(anyoverlap_interx_modeled)$coefficients[2,1]
+pm_decline_model_all[1,2] <- summary(anyoverlap_interx_modeled)$coefficients[2,1] - 1.96*sd_vector[1]
+pm_decline_model_all[1,3] <- summary(anyoverlap_interx_modeled)$coefficients[2,1] + 1.96*sd_vector[1]
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_all[i,1] <- summary(anyoverlap_interx_modeled)$coefficients[2,1]+
+    summary(anyoverlap_interx_modeled)$coefficients[yr_ct,1]
+  pm_decline_model_all[i,2] <- summary(anyoverlap_interx_modeled)$coefficients[2,1]+
+    summary(anyoverlap_interx_modeled)$coefficients[yr_ct,1] - 1.96*sd_vector[i]
+  pm_decline_model_all[i,3] <- summary(anyoverlap_interx_modeled)$coefficients[2,1]+
+    summary(anyoverlap_interx_modeled)$coefficients[yr_ct,1] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all$year <- seq(2000, 2018)
+pm_decline_model_all
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+anyoverlap_model_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        # axis.title.x = element_blank(),
+        # axis.title.y = element_blank()
+        ) +
+  guides(x =  guide_axis(angle = 45)) +
+  scale_x_continuous(breaks = seq(2000,2018,1), expand = c(0, 0)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+anyoverlap_model_interx_plot 
+```
+

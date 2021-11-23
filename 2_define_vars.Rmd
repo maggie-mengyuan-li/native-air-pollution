@@ -45,7 +45,7 @@ native_rural_counties
 ```{r}
 #Read in and define native counties by census definition, extract PM2.5 concentrations
 #Select native american counties using tidycensus: cutoff with census data of native americans > 5% of county population
-census_api_key("ef9bc9f1392567620517b2f5ba86c86ebbd70d69", overwrite=TRUE, install = TRUE)
+# census_api_key("ef9bc9f1392567620517b2f5ba86c86ebbd70d69", overwrite=TRUE, install = TRUE)
 readRenviron("~/.Renviron")
 
 #Total!!American Indian and Alaska Native alone = P003004; total population is P001001
@@ -212,6 +212,13 @@ covariates <- covariates %>% inner_join(native_census)
 
 # 1/26/2021 join in climate zones
 covariates = covariates %>% inner_join(climatezonefips)
+
+# 9/03/21 edit 46113 to 46102 to not drop counties
+covariates = covariates %>% mutate(County = str_replace(County, "46113", "46102"))
+
+## 9/29/21 save out as a df
+write_csv(covariates,
+          "intermediate/covariates.csv")
 ```
 
 
@@ -258,12 +265,22 @@ all_general_counties <- anti_join(x = all_counties_list,
 all_native_counties$county_type <- 1
 all_general_counties$county_type <- 0
 
-# need to filter out FIPS 46102, because it is a repeat of FIPS 46113 (Shannon County, SD was renamed Oglala Lakota County in 2015) 
+# need to filter out FIPS 46113, because it is a repeat of FIPS 46113 (Shannon County, SD was renamed Oglala Lakota County in 2015) 
 all_native_counties <- all_native_counties %>% 
-  filter(!County == "46102")
+  filter(!County == "46113")
 
 main_analysis_counties <- rbind(all_native_counties, all_general_counties)
 main_analysis_counties
+```
+
+```{r save out AI county classifications as separate file}
+setwd("/Users/maggieli/OneDrive - cumc.columbia.edu/QE/QE_power_calculations")
+write_csv(main_analysis_counties,
+        "ai_county_classification.csv")
+write_csv(all_native_counties,
+          "ai_counties.csv")
+write_csv(all_general_counties,
+          "nai_counties.csv")
 ```
 
 ####2.3.2 Function to assign monitor PM2.5 values for county
@@ -312,11 +329,12 @@ all_general_PM25
 ```{r}
 # extract values for main analysis AI counties
 model_PM25 <- do.call(rbind, model_PM25)
-model_PM25 <- model_PM25 %>% dplyr::rename(County=FIPS)
-model_PM25$State <- as.numeric(model_PM25$State)
-model_PM25 <- inner_join(model_PM25, covariates)
+model_PM25 <- model_PM25 %>% 
+  dplyr::rename(County=FIPS) %>% 
+  mutate(State=as.numeric(State)) %>% 
+  inner_join(covariates)
 model_PM25 <- model_PM25 %>% inner_join(main_analysis_counties)
-
+model_PM25
 ```
 
 

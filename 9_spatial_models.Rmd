@@ -1,0 +1,471 @@
+---
+title: "Additional sensitivity analyses: spatial models"
+author: "Maggie Li (ml4424)"
+date: "7/7/2021"
+output: html_document
+---
+
+## Read in packages
+```{r load packages}
+library(spdep)
+library(rgdal)
+library(rgeos)
+library(tidyverse)
+library(splm)
+```
+
+# Get data in spatial df (model_pm_sp), create Queen's contiguity spatial weights matrix (w, wm, rwm)
+```{r read in and wrangle data}
+model_pm = read_csv("intermediate/model_ctyear.csv") %>% 
+  rename(GEOID = County) %>% 
+  arrange((as.numeric(GEOID))) %>% 
+  dplyr::select(GEOID, annual_mean_all, State, year, county_type, popd_q, hhinc_q, Climate_Zone)
+
+# read in sf counties file from tigris library; filter out HI, AK, territories
+library(tigris)
+us_counties = counties() %>% filter(STATEFP != "02" & STATEFP != "15" & STATEFP <= 56)
+us_counties
+# convert sf to spdf to join with PM df
+us_counties_sp = as_Spatial(us_counties)
+
+# select only model pm2.5 data from 2000
+model_pm2000 = model_pm %>% filter(year == 2000)
+model_pm2000
+
+# join PM data with spatial dataset to create spatial df for 2000
+model_pm2000_sp <- merge(us_counties_sp, model_pm2000)
+
+# create spatial weights matrix
+w_v2 <- poly2nb(model_pm2000_sp, queen = TRUE)
+summary(w_v2)
+
+setequal(model_pm2000_sp$GEOID, model_pm$GEOID) # check that they contain same counties (even if out of order)
+
+# check on bordering counties of given county
+w_v2[[730]]
+model_pm2000_sp$GEOID[730] # random county of interest: champaign county, OH
+model_pm2000_sp$GEOID[c(516, 877, 925, 2510, 2768, 2993)] # check to see if they are actually bordering counties; they are
+
+# convert to matrix and then listw format
+# zero.policy = T to include island counties (offshore, but still a part of contiguous US state)
+wm <- nb2mat(w_v2, style='B', zero.policy = TRUE)
+rwm <- mat2listw(wm, style='W')
+```
+
+## Run spatial diagnostics on non-spatial models
+```{r OLS regression}
+# fit_1 <- lm(annual_mean_all ~ county_type + popd_q + hhinc_q,
+#             data=model_pm2000_sp)
+# summary(fit_1)
+# 
+# # check global moran's I test of residuals
+# lm.morantest(fit_1, rwm, alternative="two.sided",  zero.policy = TRUE)
+# 
+# # check local moran's I test of residuals
+# 
+# # NOTES: Global Moran's I value is significant; should proceed with spatial model
+# 
+# # run lagrange test as diagnostic for SLM or SEM
+# lm.LMtests(fit_1, rwm, test = c("LMerr","LMlag","RLMerr","RLMlag","SARMA"),
+#            zero.policy = TRUE)
+# # NOTES: All p-values are highly significant in the standard and robust tests
+```
+
+```{r linear mixed effects regression}
+library(lme4)
+
+# # get lat lon of us county centroids (projection = NAD83)
+# library(rgeos)
+# us_counties = st_read("Data/cb_2018_us_county_500k/cb_2018_us_county_500k.shp") %>% 
+#   filter(STATEFP != "02" & STATEFP != "15" & STATEFP <= 56) #filter to 48 contiguous states
+# # calculate centroid
+# sf_centroid = st_centroid(us_counties)
+# # plot
+# ggplot() + 
+#   geom_sf(data = us_counties, fill = 'white') +
+#   geom_sf(data = sf_centroid, color = 'red')
+# sf_centroid
+# 
+# # join centroid point and model PM data!
+# model_pm_sf = merge(sf_centroid, model_pm)
+# 
+# # separate x and y coordinates, append these columns to dataframe
+# model_pm_sf = model_pm_sf %>% 
+#   mutate(x = st_coordinates(model_pm_sf)[,1],
+#          y = st_coordinates(model_pm_sf)[,2])
+
+# run linear random intercept model
+nre_fit = lmer(annual_mean_all ~ county_type * as.factor(year) +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/GEOID),
+                  data = model_pm, REML=FALSE)
+summary(nre_fit)
+residuals(nre_fit)
+# create column for residual values in model PM dataframe
+model_pm$lmerres = residuals(nre_fit)
+model_pm
+```
+
+```{r}
+# Run local moran's I on residuals
+
+# filter out df with lmer residuals to just 2018 values
+model_pm_18_res = model_pm %>% filter(year == 2018)
+# join PM data with spatial dataset to create spatial df for 2018
+model_pm2018_lmer_sp <- merge(us_counties_sp, model_pm_18_res)
+
+# Local moran's I of lmer residuals
+moran.plot(model_pm2018_lmer_sp$annual_mean_all, rwm)
+
+# calculate local moran's I test of residuals
+local_lmer_18 <- localmoran(x = model_pm2018_lmer_sp$annual_mean_all, listw = rwm)
+
+# binds results to our polygon shapefile
+moran.map_lmer_18 <- cbind(model_pm2018_lmer_sp, local)
+class(moran.map_lmer_18)
+tm_shape(moran.map_lmer_18) +
+  tm_fill(col = "Ii", # local moran's I statistic values
+          style = "quantile",
+          title = "local moran statistic") 
+```
+
+```{r Map hot and cold spots based on local morans I cache = TRUE}
+# scale PM2.5
+model_pm2018_lmer_sp$s_pm25 = scale(model_pm2018_lmer_sp$annual_mean_all) %>% as.vector()
+
+#create a spatial lag variable for scaled pm2.5 and save it to a new column
+model_pm2018_lmer_sp$lag_s_pm25 <- lag.listw(rwm, model_pm2018_lmer_sp$s_pm25) # use 'rwm' listw weights object specified above to create lagged vector
+summary(model_pm2018_lmer_sp$s_pm25)
+summary(model_pm2018_lmer_sp$lag_s_pm25)
+
+x <- model_pm2018_lmer_sp$s_pm25
+y <- model_pm2018_lmer_sp$lag_s_pm25
+xx <- tibble(x,y)
+moran.plot(x, rwm) # same as scatterplot above (just rescaled)
+
+# add column to show LISA quadrants
+model_pm2018_lmer_sf <- st_as_sf(model_pm2018_lmer_sp) %>% 
+  mutate(quad_sig = ifelse(model_pm2018_lmer_sp$s_pm25 > 0 & 
+                              model_pm2018_lmer_sp$lag_s_pm25 > 0 & 
+                              local[,5] <= 0.05, 
+                     "high-high",
+                     ifelse(model_pm2018_lmer_sp$s_pm25 <= 0 & 
+                              model_pm2018_lmer_sp$lag_s_pm25 <= 0 & 
+                              local[,5] <= 0.05, 
+                     "low-low", 
+                     ifelse(model_pm2018_lmer_sp$s_pm25 > 0 & 
+                              model_pm2018_lmer_sp$lag_s_pm25 <= 0 & 
+                              local[,5] <= 0.05, 
+                     "high-low",
+                     ifelse(model_pm2018_lmer_sp$s_pm25 <= 0 & 
+                              model_pm2018_lmer_sp$lag_s_pm25 > 0 & 
+                              local[,5] <= 0.05,
+                     "low-high", 
+                     "non-significant")))))
+table(model_pm2018_lmer_sf$quad_sig)
+
+# check that all h-h l-l from table() sum up to all significant counties
+nrow(local[local[,5] <= 0.05,])
+
+qtm(model_pm2018_lmer_sf, fill="quad_sig", fill.title="LISA")
+
+```
+
+```{r}
+# # DUMMY CODE: calculate moran's I
+# library(DHARMa)
+# # It's a good idea to use a RE to take out the cluster effects. This accounts
+# # for the autocorrelation within clusters 
+# 
+# # DHARMa default is to re-simulted REs - this means spatial pattern remains
+# # because residuals are still clustered
+# 
+# res = simulateResiduals(nre_fit)
+# # testSpatialAutocorrelation(res, x =  model_pm_sf$x, y = model_pm_sf$y) DOESN'T WORK, need to group by county to account for clustering within county over time
+# 
+# # However, it should disappear if you just calculate an aggregate residuals per cluster
+# # Because at least how the data are simulated, cluster are spatially independent
+# # Group by County
+# res2 = recalculateResiduals(res, group = model_pm_sf$GEOID)
+# testSpatialAutocorrelation(res2, 
+#                            x =  aggregate(model_pm_sf$x, list(model_pm_sf$GEOID), mean)$x, 
+#                            y = aggregate(model_pm_sf$y, list(model_pm_sf$GEOID), mean)$x)
+# # Group by State
+# res3 = recalculateResiduals(res, group = model_pm_sf$STATEFP)
+# testSpatialAutocorrelation(res3, 
+#                            x =  aggregate(model_pm_sf$x, list(model_pm_sf$STATEFP), mean)$x, 
+#                            y = aggregate(model_pm_sf$y, list(model_pm_sf$STATEFP), mean)$x)
+# 
+# ## Conclusion, most counties are not spatially independent (significant moran's I values prevalent)
+```
+
+## Spatial Models using spatial reg package
+
+```{r spatial lag model}
+# library(spatialreg)
+# fit_1_lag <- lagsarlm(annual_mean_all ~ county_type + popd_q + hhinc_q,
+#             data=model_pm2000_sp, rwm, zero.policy = TRUE)
+# summary(fit_1_lag)
+```
+
+```{r spatial error model}
+# fit_1_err <- errorsarlm(annual_mean_all ~ county_type + popd_q + hhinc_q,
+#                         data=model_pm2000_sp, rwm, zero.policy = TRUE)
+# summary(fit_1_err)
+
+```
+
+## Spatial Models using splm package
+
+```{r "transform data frame into panel data"}
+library(plm)
+
+# convert df to panel dataframe
+p.data = pdata.frame(model_pm, index = c("GEOID", "year"))
+p.data
+
+# # run splm model with queen's contiguity matrix, KKP specified random effects
+# model_pm_nrelag = spml(annual_mean_all ~ county_type + popd_q + hhinc_q + year,
+#                          data = p.data,
+#                          index = c("GEOID", "year"),
+#                          listw = rwm,
+#                          model = "random",
+#                          effect = "individual",
+#                          lag = T,
+#                          spatial.error = "kkp",
+#                          zero.policy = TRUE)
+# summary(model_pm_nrelag)
+# 
+# # save model output to intermediate folder
+# saveRDS(model_pm_nrelag, file = "intermediate/spatial_models/splag_re_kkp_model.rds")
+
+# # run splm model with queen's contiguity matrix, Baltagi specified random effects
+# model_pm_nrelag_b = spml(annual_mean_all ~ county_type + popd_q + hhinc_q + year,
+#                          data = p.data,
+#                          index = c("GEOID", "year"),
+#                          listw = rwm,
+#                          model = "random",
+#                          effect = "individual",
+#                          lag = T,
+#                          spatial.error = "kkp",
+#                          zero.policy = TRUE)
+# summary(model_pm_nrelag_b)
+# 
+# # save model output to intermediate folder
+# saveRDS(model_pm_nrelag_b, file = "intermediate/spatial_models/splag_re_b_model.rds")
+
+```
+
+### Run spatial and non-spatial models; examine only recent years, after 2015
+
+```{r}
+# # convert df to panel dataframe
+# model_pm_2015.2019 = model_pm %>% filter(year >= 2015)
+# p.data.2015.2019 = pdata.frame(model_pm_2015.2019, index = c("GEOID", "year"))
+# p.data.2015.2019
+# 
+# lme_2015.2019 <- lmer(annual_mean_all ~ county_type + year +
+#                     popd_q + 
+#                     hhinc_q +
+#                     county_type*year +
+#                     (1|State/GEOID),
+#                   data = model_pm_2015.2019, REML=FALSE)
+# summary(lme_2015.2019)
+
+# run splm model with queen's contiguity matrix, KKP specified random effects
+# model_pm_kkp_2015.2019 = spml(annual_mean_all ~ county_type*year + popd_q + hhinc_q,
+#                          data = p.data.2015.2019,
+#                          index = c("GEOID", "year"),
+#                          listw = rwm,
+#                          model = "random",
+#                          effect = "individual",
+#                          lag = T,
+#                          spatial.error = "kkp",
+#                          zero.policy = TRUE)
+# summary(model_pm_kkp_2015.2019)
+
+```
+
+
+### All Years: Run nonspatial and spatial models
+#### Non spatial model
+```{r}
+model_pm_lme <- lmer(annual_mean_all ~ county_type*as.factor(year) +
+                    popd_q + 
+                    hhinc_q +
+                    (1|State/GEOID),
+                  data = model_pm, REML=FALSE)
+summary(model_pm_lme)
+dim(model.matrix(model_pm_lme)) 
+```
+#### Spatial models (w/ contiguity based spatial weights matrix)
+
+##### Without interX
+```{r cache = TRUE}
+# # run splm model with queen's contiguity matrix, KKP specified random effects
+# model_pm_kkp = spml(annual_mean_all ~ county_type + year + popd_q + hhinc_q,
+#                          data = p.data,
+#                          index = c("GEOID", "year"),
+#                          listw = rwm,
+#                          model = "random",
+#                          effect = "individual",
+#                          lag = T,
+#                          spatial.error = "kkp",
+#                          zero.policy = TRUE)
+# summary(model_pm_kkp)
+# 
+# # splag = readRDS("intermediate/spatial_models/splag_re_b_model.rds")
+# # splag
+```
+
+
+##### With interX
+```{r cache = TRUE}
+# run splm model with queen's contiguity matrix, KKP specified random effects, interX between county type and year
+# V1
+model_pm_kkp_interx = spml(annual_mean_all ~ county_type*year + popd_q + hhinc_q,
+                         data = p.data,
+                         index = c("GEOID", "year"),
+                         listw = rwm,
+                         model = "random",
+                         effect = "individual",
+                         lag = T,
+                         spatial.error = "kkp",
+                         zero.policy = TRUE)
+summary(model_pm_kkp_interx)
+
+```
+
+```{r}
+data("Produc", package = "Ecdat")
+class(Produc)
+class(p.data)
+data("usaww")
+```
+
+
+```{r run spml on simple df instead of panel df}
+model_pm_kkp_interx_df = spml(annual_mean_all ~ county_type*year + popd_q + hhinc_q,
+                         data = model_pm,
+                         index = c("GEOID", "year"),
+                         listw = rwm,
+                         model = "random",
+                         effect = "individual",
+                         lag = T,
+                         spatial.error = "kkp",
+                         zero.policy = TRUE)
+summary(model_pm_kkp_interx_df)
+```
+
+
+```{r cache = TRUE}
+# # V2
+# model_pm_kkp_interx_v2 = spml(annual_mean_all ~ county_type*year + popd_q + hhinc_q,
+#                          data = p.data,
+#                          index = c("year", "GEOID"), # reverse this from V1 above
+#                          listw = rwm,
+#                          model = "random",
+#                          effect = "individual",
+#                          lag = T,
+#                          spatial.error = "kkp",
+#                          zero.policy = TRUE)
+# summary(model_pm_kkp_interx_v2)
+```
+
+
+###### Difference in time trends plot
+```{r}
+# vcov matrix
+native_yr_vcov <- vcov(model_pm_kkp_interx)[c(2,seq(39,56)), c(2,seq(39,56))]
+# calculate all the variances for all the years i.e. var(x+y); should be 19 total entries
+var_vector = c()
+for (i in 2:19){
+  var_vector[1] <- native_yr_vcov[1,1]
+  var_vector[i] <- native_yr_vcov[1,1] + native_yr_vcov[i,i] + 2 * native_yr_vcov[i,1]
+}
+
+sd_vector <- sqrt(var_vector)
+
+#matrix with 19 cols for 19 years, three rows: one for effect estimate of total effect per year (total effect = main effect + interx effect), one for CI lower, one for CI upper
+pm_decline_model_all <- data.frame()
+pm_decline_model_all[1,1] <- summary(model_pm_kkp_interx)$coefficients[2] # county type main effect estimate (baseline year)
+pm_decline_model_all[1,2] <- summary(model_pm_kkp_interx)$coefficients[2] - 1.96*sd_vector[1] # LL 95% CI
+pm_decline_model_all[1,3] <- summary(model_pm_kkp_interx)$coefficients[2] + 1.96*sd_vector[1] # UL 95% CI
+names(summary(model_pm_kkp_interx))
+summary(model_pm_kkp_interx)
+
+# fill in matrix thru loop for every following year
+yr_ct <- 39
+for (i in 2:19){
+  pm_decline_model_all[i,1] <- summary(model_pm_kkp_interx)$coefficients[2]+
+    summary(model_pm_kkp_interx)$coefficients[yr_ct]
+  pm_decline_model_all[i,2] <- summary(model_pm_kkp_interx)$coefficients[2]+
+    summary(model_pm_kkp_interx)$coefficients[yr_ct] - 1.96*sd_vector[i]
+  pm_decline_model_all[i,3] <- summary(model_pm_kkp_interx)$coefficients[2]+
+    summary(model_pm_kkp_interx)$coefficients[yr_ct] + 1.96*sd_vector[i]
+  yr_ct <- yr_ct + 1
+}
+# set col names
+colnames(pm_decline_model_all) <- c('estimate', 'cl_lower', 'cl_upper')
+pm_decline_model_all$year <- seq(2000, 2018)
+
+#PLOT OF TOTAL EFFECT OF NATIVE OVER TIME
+modelsp_interx_plot <-ggplot() + 
+  theme_linedraw() + 
+  geom_line(data = pm_decline_model_all,
+            aes(x=year, y = estimate)) +
+  geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_lower), linetype = "dashed") +
+    geom_line(data=pm_decline_model_all,
+            aes(x=year, y=cl_upper), linetype = "dashed") +
+  ylim(-2.4,1.3) +
+  # ggtitle(expression(paste("Modeled ", PM[2.5], " Difference in AI vs. Non-AI Populated Counties"))) +
+  ylab(expression(paste("Mean Difference in ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+  xlab("Year") +
+  theme(plot.title = element_text(size = 18),
+        axis.title = element_text(size = 16),
+        axis.text = element_text(size = 12),
+        # axis.title.x = element_blank(),
+        # axis.title.y = element_blank()
+        ) +
+  guides(x =  guide_axis(angle = 45)) +
+  scale_x_continuous(breaks = seq(2000,2018,1), expand = c(0, 0)) + 
+  geom_hline(yintercept=0, linetype="solid", color = "red") 
+modelsp_interx_plot
+ggsave("figures/updated_12.7/modelsp_interx_plot.png")
+```
+
+#### Spatial models (w/ distance based spatial weights matrix)
+
+```{r}
+# # create distance based matrix
+# library(fields)
+# model_pm2000_sp
+# mycoords <- coordinates(model_pm2000_sp) # creates xy coords of all 3107 counties
+# length(mycoords)                         # should be 6214 (3107*2)
+# mydm <- rdist.earth(mycoords)            # computes distance in miles!
+# for(i in 1:dim(mydm)[1]) {mydm[i,i] = 0} # renders exactly zero all diagonal elements
+# mydm[mydm > 1000] <- 0                   # all distances > 1000 miles are set to zero
+# mydm <- ifelse(mydm!=0, 1/mydm, mydm)    # inverting distances
+# mydm.lw <- mat2listw(mydm, style="W")    # create a (normalized) listw object
+# mydmi <- listw2mat(mydm.lw)              # change back to 'classic' matrix, if desired
+# View(mydm.lw)
+# 
+# w_v2[[730]]
+# model_pm2000_sp$GEOID[730]
+# model_pm2000_sp$GEOID[c(334, 1668, 1680, 1851, 1901, 2099, 2657)]
+# 
+# # run spatial model with inverse distance based matrix
+# model_pm_kkp_interx_idm = spml(annual_mean_all ~ county_type*year + popd_q + hhinc_q,
+#                          data = p.data,
+#                          index = c("year", "GEOID"), # reverse this from V1 above
+#                          listw = mydm.lw,
+#                          model = "random",
+#                          effect = "individual",
+#                          lag = T,
+#                          spatial.error = "kkp",
+#                          zero.policy = TRUE)
+# summary(model_pm_kkp_interx_idm)
+```
+

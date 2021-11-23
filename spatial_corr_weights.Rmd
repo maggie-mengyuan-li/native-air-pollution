@@ -1,0 +1,340 @@
+---
+title: "Spatial Correlation and Weights"
+author: "Maggie Li (ml4424)"
+date: "9/2/2021"
+output: html_document
+---
+
+```{r load pkgs}
+library(spdep)
+library(rgdal)
+library(rgeos)
+library(tidyverse)
+library(splm)
+library(tmap)
+```
+
+
+# Get data in spatial df (model_pm_sp), create Queen's contiguity spatial weights matrix (w, wm, rwm)
+```{r read in and wrangle data}
+model_pm = read_csv("intermediate/model_ctyear.csv") %>% 
+  rename(GEOID = County) %>% 
+  arrange((as.numeric(GEOID))) %>% 
+  dplyr::select(GEOID, annual_mean_all, State, year, county_type, popd_q, hhinc_q, Climate_Zone)
+
+# read in sf counties file from tigris library; filter out HI, AK, territories
+library(tigris)
+us_counties = counties() %>% filter(STATEFP != "02" & STATEFP != "15" & STATEFP <= 56)
+us_counties
+# convert sf to spdf to join with PM df
+us_counties_sp = as_Spatial(us_counties)
+
+# select only model pm2.5 data from 2000
+model_pm2000 = model_pm %>% filter(year == 2000)
+model_pm2000
+
+# join PM data with spatial dataset to create spatial df for 2000
+model_pm2000_sp <- merge(us_counties_sp, model_pm2000)
+
+# create spatial weights matrix
+w_v2 <- poly2nb(model_pm2000_sp, queen = TRUE)
+summary(w_v2)
+
+setequal(model_pm2000_sp$GEOID, model_pm$GEOID) # check that they contain same counties (even if out of order)
+
+# check on bordering counties of given county
+w_v2[[730]]
+model_pm2000_sp$GEOID[730] # random county of interest: champaign county, OH
+model_pm2000_sp$GEOID[c(516, 877, 925, 2510, 2768, 2993)] # check to see if they are actually bordering counties; they are
+
+# convert to matrix and then listw format
+# zero.policy = T to include island counties (offshore, but still a part of contiguous US state)
+wm <- nb2mat(w_v2, style='B', zero.policy = TRUE)
+rwm <- mat2listw(wm, style='W')
+```
+
+## Inverse distance weights matrix
+I used this resource: https://spatialanalysis.github.io/lab_tutorials/Spatial_Weights_as_Distance_Functions.html#creating-inverse-distance-functions-for-distance-bands 
+```{r cache = TRUE}
+# create inverse distance functions for distance bands
+# get coordinates of counties
+coordinates_pm = coordinates(model_pm2000_sp)
+# get k = 1 nearest neighbors, we want each county to have at least one nearest neighbor and need to extract the max distance between neighbors of all counties
+k1 <- knn2nb(knearneigh(coordinates_pm))
+
+# get the max distance between county and closest neighbor to set upper bound
+critical.threshold <- max(unlist(nbdists(k1,coordinates_pm)))
+
+
+# use dnearneigh to calculate distance band 
+nb.dist.band <- dnearneigh(coordinates_pm, 0, critical.threshold) # args are coordinates, lower bound = 0, upper bound = critical thres
+
+# use nbdists to get distances in similar structure as input neighbors list above
+distances <- nbdists(nb.dist.band, coordinates_pm)
+distances[1]
+
+# apply 1/x function on distances list
+invd1 <- lapply(distances, function(x) (1/x)) 
+
+# NOTE: I think units are in decimal degrees (given coordinates are lat long)
+
+# check length to make sure it's the same as neighbors list
+length(invd1)
+
+invd1[1] # check first element
+
+# convert distance band to listw weight
+invd.weights <- nb2listw(nb.dist.band, glist = invd1,style = "B")
+
+summary(invd.weights)
+
+# Check value of weights
+invd.weights$weights[1]
+```
+
+## Spatial Autocorrelation Tests using Queen's Contiguity Matrix (Model PM2.5 outcome in 2000)
+
+```{r Global Morans I cache = TRUE}
+# global moran's I of outcome
+moran(model_pm2000_sp$annual_mean_all,
+      rwm,
+      length(w_v2),
+      Szero(rwm))[1] # note: very close to 1, high spatial autocorrelation present
+# MC simulation for global moran's I
+MC_q <- moran.mc(model_pm2000_sp$annual_mean_all, rwm, nsim=999, alternative="greater")
+
+# MC results (including p-value)
+MC_q # note: also significant; outcome is significantly spatially clustered
+
+fit_1 <- lm(annual_mean_all ~ county_type + popd_q + hhinc_q,
+            data=model_pm2000_sp)
+summary(fit_1)
+
+# Check global moran's I test of residuals = 0.7 (much closer to 1 than 0, evidence of spatial autocorr)
+lm.morantest(fit_1, rwm, alternative="two.sided",  zero.policy = TRUE)
+
+## Global Moran's i scatterplot of residuals
+moran <- moran.plot(x = model_pm2000_sp$annual_mean_all, listw = rwm)
+
+## highly positive association; strong evidence for spatially autocorrelated data
+```
+
+```{r Local Morans I for PM2.5; basic map of Ii values cache = TRUE}
+# Local moran's I of outcome
+moran.plot(model_pm2000_sp$annual_mean_all, rwm)
+
+# calculate local moran's I test of residuals
+local <- localmoran(x = model_pm2000_sp$annual_mean_all, listw = rwm)
+# binds results to our polygon shapefile
+moran.map <- cbind(model_pm2000_sp, local)
+
+tm_shape(moran.map) +
+  tm_fill(col = "Ii", # local moran's I statistic values
+          style = "quantile",
+          title = "local moran statistic") 
+
+```
+
+```{r Map hot and cold spots based on local morans I cache = TRUE}
+# scale PM2.5
+model_pm2000_sp$s_pm25 = scale(model_pm2000_sp$annual_mean_all) %>% as.vector()
+
+#create a spatial lag variable for scaled pm2.5 and save it to a new column
+model_pm2000_sp$lag_s_pm25 <- lag.listw(rwm, model_pm2000_sp$s_pm25) # use 'rwm' listw weights object specified above to create lagged vector
+summary(model_pm2000_sp$s_pm25)
+summary(model_pm2000_sp$lag_s_pm25)
+
+x <- model_pm2000_sp$s_pm25
+y <- model_pm2000_sp$lag_s_pm25
+xx <- tibble(x,y)
+moran.plot(x, rwm) # same as scatterplot above (just rescaled)
+
+# add column to show LISA quadrants
+model_pm2000_sf <- st_as_sf(model_pm2000_sp) %>% 
+  mutate(quad_sig = ifelse(model_pm2000_sp$s_pm25 > 0 & 
+                              model_pm2000_sp$lag_s_pm25 > 0 & 
+                              local[,5] <= 0.05, 
+                     "high-high",
+                     ifelse(model_pm2000_sp$s_pm25 <= 0 & 
+                              model_pm2000_sp$lag_s_pm25 <= 0 & 
+                              local[,5] <= 0.05, 
+                     "low-low", 
+                     ifelse(model_pm2000_sp$s_pm25 > 0 & 
+                              model_pm2000_sp$lag_s_pm25 <= 0 & 
+                              local[,5] <= 0.05, 
+                     "high-low",
+                     ifelse(model_pm2000_sp$s_pm25 <= 0 & 
+                              model_pm2000_sp$lag_s_pm25 > 0 & 
+                              local[,5] <= 0.05,
+                     "low-high", 
+                     "non-significant")))))
+table(model_pm2000_sf$quad_sig)
+
+# check that all h-h l-l from table() sum up to all significant counties
+nrow(local[local[,5] <= 0.05,])
+
+qtm(model_pm2000_sf, fill="quad_sig", fill.title="LISA")
+
+```
+
+## Spatial Autocorrelation Tests using Queen's Contiguity Matrix (Model PM2.5 outcome in 2018)
+```{r Global Morans I cache = TRUE}
+# select only model pm2.5 data from 2018
+model_pm2018 = model_pm %>% filter(year == 2018)
+model_pm2018
+# join PM data with spatial dataset to create spatial df for 2000
+model_pm2018_sp <- merge(us_counties_sp, model_pm2018)
+
+# global moran's I of outcome
+moran(model_pm2018_sp$annual_mean_all,
+      rwm,
+      length(w_v2),
+      Szero(rwm))[1] # note: very close to 1, high spatial autocorrelation present
+# MC simulation for global moran's I
+MC_q_18 <- moran.mc(model_pm2018_sp$annual_mean_all, rwm, nsim=999, alternative="greater")
+
+# MC results (including p-value)
+MC_q_18 # note: also significant; outcome is significantly spatially clustered
+
+fit_18 <- lm(annual_mean_all ~ county_type + popd_q + hhinc_q,
+            data=model_pm2018_sp)
+summary(fit_18)
+
+# Check global moran's I test of residuals = 0.7 (much closer to 1 than 0, evidence of spatial autocorr)
+lm.morantest(fit_18, rwm, alternative="two.sided",  zero.policy = TRUE)
+
+## Global Moran's i scatterplot of residuals
+moran <- moran.plot(x = model_pm2018_sp$annual_mean_all, listw = rwm)
+
+## highly positive association; strong evidence for spatially autocorrelated data
+```
+
+```{r Local Morans I for PM2.5; basic map of Ii values cache = TRUE}
+# Local moran's I of outcome
+moran.plot(model_pm2018_sp$annual_mean_all, rwm)
+
+# calculate local moran's I test of residuals
+local_18 <- localmoran(x = model_pm2018_sp$annual_mean_all, listw = rwm)
+# binds results to our polygon shapefile
+moran.map_18 <- cbind(model_pm2018_sp, local)
+
+tm_shape(moran.map_18) +
+  tm_fill(col = "Ii", # local moran's I statistic values
+          style = "quantile",
+          title = "local moran statistic") 
+
+```
+
+```{r Map hot and cold spots based on local morans I cache = TRUE}
+# scale PM2.5
+model_pm2018_sp$s_pm25 = scale(model_pm2018_sp$annual_mean_all) %>% as.vector()
+
+#create a spatial lag variable for scaled pm2.5 and save it to a new column
+model_pm2018_sp$lag_s_pm25 <- lag.listw(rwm, model_pm2018_sp$s_pm25) # use 'rwm' listw weights object specified above to create lagged vector
+summary(model_pm2018_sp$s_pm25)
+summary(model_pm2018_sp$lag_s_pm25)
+
+x <- model_pm2018_sp$s_pm25
+y <- model_pm2018_sp$lag_s_pm25
+xx <- tibble(x,y)
+moran.plot(x, rwm) # same as scatterplot above (just rescaled)
+
+# add column to show LISA quadrants
+model_pm2018_sf <- st_as_sf(model_pm2018_sp) %>% 
+  mutate(quad_sig = ifelse(model_pm2018_sp$s_pm25 > 0 & 
+                              model_pm2018_sp$lag_s_pm25 > 0 & 
+                              local[,5] <= 0.05, 
+                     "high-high",
+                     ifelse(model_pm2018_sp$s_pm25 <= 0 & 
+                              model_pm2018_sp$lag_s_pm25 <= 0 & 
+                              local[,5] <= 0.05, 
+                     "low-low", 
+                     ifelse(model_pm2018_sp$s_pm25 > 0 & 
+                              model_pm2018_sp$lag_s_pm25 <= 0 & 
+                              local[,5] <= 0.05, 
+                     "high-low",
+                     ifelse(model_pm2018_sp$s_pm25 <= 0 & 
+                              model_pm2018_sp$lag_s_pm25 > 0 & 
+                              local[,5] <= 0.05,
+                     "low-high", 
+                     "non-significant")))))
+table(model_pm2018_sf$quad_sig)
+
+# check that all h-h l-l from table() sum up to all significant counties
+nrow(local[local[,5] <= 0.05,])
+
+qtm(model_pm2018_sf, fill="quad_sig", fill.title="LISA")
+
+```
+
+
+## Spatial Autocorrelation Tests using Inverse distance weights (Model PM2.5 in 2000)
+
+```{r Global Morans I Inv Dist cache = TRUE}
+fit_1 <- lm(annual_mean_all ~ county_type + popd_q + hhinc_q,
+            data=model_pm2000_sp)
+summary(fit_1)
+
+# check global moran's I test of residuals = 0.7 (much closer to 1 than 0, evidence of spatial autocorr)
+lm.morantest(fit_1, invd.weights, alternative="two.sided",  zero.policy = TRUE)
+
+## moran's i scatterplot
+moran_invd <- moran.plot(x = model_pm2000_sp$annual_mean_all, listw = invd.weights)
+## highly positive association; strong evidence for spatially autocorrelated data
+```
+
+```{r Local Morans I for PM2.5; basic map of Ii values Inv Dist cache = TRUE}
+# calculate local moran's I test of residuals
+local_invd <- localmoran(x = model_pm2000_sp$annual_mean_all, listw = invd.weights)
+# binds results to our polygon shapefile
+moran.map_invd <- cbind(model_pm2000_sp, local_invd)
+
+tm_shape(moran.map_invd) +
+  tm_fill(col = "Ii", # local moran's I statistic values
+          style = "quantile",
+          title = "local moran statistic") 
+
+```
+
+```{r Map hot and cold spots based on local morans I Inv Dist cache = TRUE}
+# scale PM2.5
+model_pm2000_sp$s_pm25_invd = scale(model_pm2000_sp$annual_mean_all) %>% as.vector()
+
+#create a spatial lag variable for scaled pm2.5 and save it to a new column
+model_pm2000_sp$lag_s_pm25_invd <- lag.listw(invd.weights, model_pm2000_sp$s_pm25) # use 'invd.weights' listw weights object specified above to create lagged vector
+summary(model_pm2000_sp$s_pm25_invd)
+summary(model_pm2000_sp$lag_s_pm25_invd)
+
+x <- model_pm2000_sp$s_pm25_invd
+y <- model_pm2000_sp$lag_s_pm25_invd
+xx <- tibble(x,y)
+moran.plot(x, invd.weights) # same as scatterplot above (just rescaled)
+
+# add column to show LISA quadrants
+model_pm2000_sf_invd <- st_as_sf(model_pm2000_sp) %>% 
+  mutate(quad_sig_invd = ifelse(model_pm2000_sp$s_pm25_invd > 0 & 
+                              model_pm2000_sp$lag_s_pm25_invd > 0 & 
+                              local[,5] <= 0.05, 
+                     "high-high",
+                     ifelse(model_pm2000_sp$s_pm25_invd <= 0 & 
+                              model_pm2000_sp$lag_s_pm25_invd <= 0 & 
+                              local[,5] <= 0.05, 
+                     "low-low", 
+                     ifelse(model_pm2000_sp$s_pm25_invd > 0 & 
+                              model_pm2000_sp$lag_s_pm25_invd <= 0 & 
+                              local[,5] <= 0.05, 
+                     "high-low",
+                     ifelse(model_pm2000_sp$s_pm25_invd <= 0 & 
+                              model_pm2000_sp$lag_s_pm25_invd > 0 & 
+                              local[,5] <= 0.05,
+                     "low-high", 
+                     "non-significant")))))
+table(model_pm2000_sf_invd$quad_sig_invd)
+
+# check that all h-h l-l from table() sum up to all significant counties
+nrow(local[local[,5] <= 0.05,])
+
+qtm(model_pm2000_sf_invd, fill="quad_sig_invd", fill.title="LISA") 
+
+```
+

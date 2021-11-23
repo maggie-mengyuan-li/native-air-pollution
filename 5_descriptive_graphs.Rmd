@@ -394,7 +394,8 @@ monitor_combined <- ggplot() +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 12),
         axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
+  guides(x =  guide_axis(angle = 45)) +
+  geom_hline(yintercept=12, linetype="solid", color = "red")
 monitor_combined
 
 # add caption/title
@@ -443,7 +444,8 @@ monitor_statesonly <- ggplot() +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 12),
         axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
+  guides(x =  guide_axis(angle = 45)) +
+  geom_hline(yintercept=12, linetype="solid", color = "red")
 monitor_statesonly
 
 # add caption/title (data source)
@@ -477,7 +479,8 @@ monitor_unadj <- ggplot() +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 12),
         axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
+  guides(x =  guide_axis(angle = 45)) +
+  geom_hline(yintercept=12, linetype="solid", color = "red")
 monitor_unadj
 
 # add caption/title (data source)
@@ -495,7 +498,7 @@ ggsave("presentations/layering_trends/monitor_full.png")
 # Full model pm2.5 dataset
 model_PM25
 # Separate out data of just native counties (to use for unadjusted line):
-native_modelpm <- model_PM25 %>% filter(county_type == 1)
+native_modelpm <- model_PM25 %>% filter(county_type == 1) 
 # Join with data to get state acronyms
 native_modelpm <- native_modelpm %>% 
   dplyr::select(County, Year, PM25, State)
@@ -503,7 +506,7 @@ native_modelpm <- native_modelpm %>% inner_join(state_fips)
 native_modelpm
 
 # Separate out data of non-native counties (to use for unadjusted line):
-nonnative_modelpm <- model_PM25 %>% filter(county_type == 0)
+nonnative_modelpm <- model_PM25 %>% filter(county_type == 0) 
 # model_PM25 <- model_PM25 %>% dplyr::rename(Year = year)
 # Join with data to get state acronyms
 nonnative_modelpm <- nonnative_modelpm %>% 
@@ -527,31 +530,34 @@ dta.all.modelPM$hhinc_q <- cut(dta.all.modelPM$hh_income,
 
 
 ## Fit linear mixed effect regression model to the data
-mod.all.modelPM <- gamm4(PM25 ~ county_type*as.factor(Year) + popd_q + hhinc_q,
+mod.all.modelPM <- gamm4(PM25 ~ county_type*as.factor(Year) + 
+                           popd_q + hhinc_q,
                  random =~(1|State/County),
                  data = dta.all.modelPM)
-summary(mod.all.modelPM$gam)
+summary(mod.all.modelPM$gam) 
 
 
-# mod.lmer.modelPM <- lmer(PM25 ~ county_type + as.factor(Year) +
-#                     popd_q + 
-#                     hhinc_q +
-#                     county_type*as.factor(Year) +
-#                     (1|State/County),
-#                   data = dta.all.modelPM, REML=FALSE)
-# summary(mod.lmer.modelPM)
+mod.lmer.modelPM <- lmer(PM25 ~ county_type + as.factor(Year) +
+                    popd_q +
+                    hhinc_q +
+                    county_type*as.factor(Year) +
+                    (1|State/County),
+                  data = dta.all.modelPM, REML=FALSE)
+summary(mod.lmer.modelPM)
+summary(mod.all.modelPM$gam) 
 
-# pred_df.model = 
-#    expand_grid(
-#       Year = 2000:2018,
-#       county_type = c(0,1),
-#       popd_q = "(32.7,45.6]",
-#       hhinc_q = "(4.03e+04,4.24e+04]"
-#    )
 
-## most common decile
+pred_df.model =
+   expand_grid(
+      Year = 2000:2018,
+      county_type = c(0,1),
+      popd_q = "(32.7,45.6]",
+      hhinc_q = "(4.03e+04,4.24e+04]"
+   )
+
+## most common decile for popd and hhinc
 dta.all.modelPM %>% 
-  group_by(county_type, popd_q) %>% 
+  group_by(county_type, hhinc_q) %>% 
   summarize(N = n()) %>% 
   filter(N==max(N))
 
@@ -840,7 +846,8 @@ model_combined <- ggplot() +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 12),
         axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
+  guides(x =  guide_axis(angle = 45)) +
+  geom_hline(yintercept=12, linetype="solid", color = "red")
 model_combined
 
 # add caption/title
@@ -875,7 +882,8 @@ model_statesonly <- ggplot() +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 12),
         axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
+  guides(x =  guide_axis(angle = 45)) +
+  geom_hline(yintercept=12, linetype="solid", color = "red")
 model_statesonly
 
 # add caption/title (data source)
@@ -909,7 +917,8 @@ model_unadj <- ggplot() +
         axis.title = element_text(size = 16),
         axis.text = element_text(size = 12),
         axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
+  guides(x =  guide_axis(angle = 45)) +
+  geom_hline(yintercept=12, linetype="solid", color = "red")
 model_unadj
 
 # add caption/title (data source)
