@@ -19,6 +19,11 @@ library(htmltools)
 counties <- readOGR("Data/cb_2018_us_county_500k/cb_2018_us_county_500k.shp")
 summary(counties)
 
+# read in counties by different classifications
+census = read_csv("intermediate/census.csv")
+cluster = read_csv(cluster, "intermediate/cluster.csv")
+reservation = read_csv(reservation, "intermediate/reservation.csv")
+
 #census
 census_counties <- census %>%
   mutate(County = str_replace(County, "46113", "46102")) %>% 
@@ -64,6 +69,8 @@ reservation_shp <- merge(counties, reservation_counties, by = 'GEOID',
                  all = FALSE, duplicateGeoms = TRUE)
 length(reservation_counties$GEOID)
 length(reservation_shp$GEOID) 
+
+
 ```
 
 ### Define monitor locations on AI counties to include in map
@@ -531,8 +538,140 @@ browsable(
           )
        ),
      all_class_map)))
-
 ```
+
+```{r Save out All Classification Map as PDF}
+library(mapview)
+library(shiny)
+ui <- fluidPage(
+  # 1. js to get width/height of map div
+  tags$head(tags$script('
+                        var dimension = [0, 0];
+                        $(document).on("shiny:connected", function(e) {
+                        dimension[0] = document.getElementById("map").clientWidth;
+                        dimension[1] = document.getElementById("map").clientHeight;
+                        Shiny.onInputChange("dimension", dimension);
+                        });
+                        $(window).resize(function(e) {
+                        dimension[0] = document.getElementById("map").clientWidth;
+                        dimension[1] = document.getElementById("map").clientHeight;
+                        Shiny.onInputChange("dimension", dimension);
+                        });
+                        ')),
+  leafletOutput("map"),
+  downloadButton("dl", "Download Map")
+  )
+
+server <- function(input, output, session) {
+
+  # reactive values to store map
+  vals <- reactiveValues()
+
+  # create base map  
+  output$map <- renderLeaflet({
+    vals$base <- all_class_map
+  })
+
+  # create map as viewed by user
+  observeEvent({
+    input$map_zoom
+    input$map_center
+    }, {
+      vals$current <- vals$base %>% 
+        setView(lng = input$map_center$lng,
+                lat = input$map_center$lat,
+                zoom = input$map_zoom)
+    }
+  )
+
+  # create download
+  output$dl <- downloadHandler(
+    filename = "figures/map.pdf",
+
+    content = function(file) {
+      mapshot(vals$current, file = file,
+              # 2. specify size of map based on div size
+              vwidth = input$dimension[1], vheight = input$dimension[2])
+    }
+  )
+
+}
+shinyApp(ui = ui, server = server)
+
+mapshot(all_class_map, file = "figures/all_class_map.pdf",
+        vwidth= 1000, vheight = 600)
+```
+
+```{r another try}
+
+ui <- fluidPage(
+  leafletOutput( outputId = "map"),
+  downloadButton( outputId = "dl")
+)
+
+server <- function(input, output, session) {
+
+  # Create foundational leaflet map
+  # and store it as a reactive expression
+  foundational.map <- reactive({
+
+    all_class_map
+
+  }) # end of foundational.map()
+
+  # render foundational leaflet map
+  output$map <- leaflet::renderLeaflet({
+
+    # call reactive map
+    foundational.map()
+
+  }) # end of render leaflet
+
+  # store the current user-created version
+  # of the Leaflet map for download in 
+  # a reactive expression
+  user.created.map <- reactive({
+
+    # call the foundational Leaflet map
+    foundational.map() %>%
+
+      # store the view based on UI
+      setView( lng = input$map_center$lng
+               ,  lat = input$map_center$lat
+               , zoom = input$map_zoom
+      )
+
+  }) # end of creating user.created.map()
+
+
+
+  # create the output file name
+  # and specify how the download button will take
+  # a screenshot - using the mapview::mapshot() function
+  # and save as a PDF
+  output$dl <- downloadHandler(
+    filename = paste0( Sys.Date()
+                       , "_customLeafletmap"
+                       , ".pdf"
+    )
+
+    , content = function(file) {
+      mapshot( x = user.created.map()
+               , file = file
+               , cliprect = "viewport" # the clipping rectangle matches the height & width from the viewing port
+               , selfcontained = FALSE # when this was not specified, the function for produced a PDF of two pages: one of the leaflet map, the other a blank page.
+      )
+    } # end of content() function
+  ) # end of downloadHandler() function
+
+} # end of server
+
+# run the Shiny app
+shinyApp(ui = ui, server = server)
+
+# end of script #
+```
+
 
 ### Try pattern scheme using ggmap
 ```{r}

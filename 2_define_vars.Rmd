@@ -273,15 +273,6 @@ main_analysis_counties <- rbind(all_native_counties, all_general_counties)
 main_analysis_counties
 ```
 
-```{r save out AI county classifications as separate file}
-setwd("/Users/maggieli/OneDrive - cumc.columbia.edu/QE/QE_power_calculations")
-write_csv(main_analysis_counties,
-        "ai_county_classification.csv")
-write_csv(all_native_counties,
-          "ai_counties.csv")
-write_csv(all_general_counties,
-          "nai_counties.csv")
-```
 
 ####2.3.2 Function to assign monitor PM2.5 values for county
 ```{r}

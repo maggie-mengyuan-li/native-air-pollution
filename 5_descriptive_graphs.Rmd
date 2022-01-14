@@ -79,7 +79,7 @@ summary(mod.all$gam)
 
 ## most common decile
 dta.all %>% 
-  group_by(county_type, hhinc_q) %>% 
+  group_by(county_type, popd_q) %>% 
   summarize(N = n()) %>% 
   filter(N==max(N))
 
@@ -934,62 +934,61 @@ ggsave("presentations/layering_trends/model_full.png")
 
 ```{r}
 
-## MONITOR: predict without ref group (og data)
-
-preds_all <- dta.all %>% 
-  modelr::add_predictions(mod.all$gam) %>% 
-  group_by(year, county_type) %>% 
-  summarize(adj_mean = mean(pred))
-
-## average decline AI monitor with most common non-AI decile
-preds_all %>% 
-  filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
-  preds_all %>% 
-  filter(county_type == 1) %>% pull(adj_mean) %>% last()
-
-## average decline non-AI monitor
-preds_all %>% 
-  filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
-  preds_all %>% 
-  filter(county_type == 0) %>% pull(adj_mean) %>% last()
-
-## MODEL: predict without ref group (og data), add two chunks output below to main text
-
-preds_all.modelPM <- dta.all.modelPM %>% 
-  modelr::add_predictions(mod.all.modelPM$gam) %>% 
-  group_by(Year, county_type) %>% 
-  summarize(adj_mean = mean(pred))
-
-## average decline AI monitor
-preds_all.modelPM %>% 
-  filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
-  preds_all %>% 
-  filter(county_type == 1) %>% pull(adj_mean) %>% last()
-
-## average decline non-AI monitor
-preds_all.modelPM %>% 
-  filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
-  preds_all %>% 
-  filter(county_type == 0) %>% pull(adj_mean) %>% last()
-
-
-# ai_monitor_adj
-# nai_monitor_adj
+## MONITOR: predict without ref group (og data); data not presented in manuscript after consulting with J Goldsmith
+# preds_all <- dta.all %>% 
+#   modelr::add_predictions(mod.all$gam) %>% 
+#   group_by(year, county_type) %>% 
+#   summarize(adj_mean = mean(pred))
 # 
-# ai_model_adj
-# nai_model_adj
-# 
-# ## average decline AI monitor
-# ai_monitor_adj$annual_mean_all %>% first() - ai_monitor_adj$annual_mean_all %>% last()
+# ## average decline AI monitor with most common non-AI decile
+# preds_all %>% 
+#   filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
+#   preds_all %>% 
+#   filter(county_type == 1) %>% pull(adj_mean) %>% last()
 # 
 # ## average decline non-AI monitor
-# nai_monitor_adj$annual_mean_all %>% first() - nai_monitor_adj$annual_mean_all %>% last()
+# preds_all %>% 
+#   filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
+#   preds_all %>% 
+#   filter(county_type == 0) %>% pull(adj_mean) %>% last()
 # 
-# ## average decline AI model
-# ai_model_adj$annual_mean_all %>% first() - ai_model_adj$annual_mean_all %>% last()
+# ## MODEL: predict without ref group (og data), add two chunks output below to main text
 # 
-# ## average decline in non-AI model
-# nai_model_adj$annual_mean_all %>% first() - nai_model_adj$annual_mean_all %>% last()
+# preds_all.modelPM <- dta.all.modelPM %>% 
+#   modelr::add_predictions(mod.all.modelPM$gam) %>% 
+#   group_by(Year, county_type) %>% 
+#   summarize(adj_mean = mean(pred))
+# 
+# ## average decline AI monitor
+# preds_all.modelPM %>% 
+#   filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
+#   preds_all %>% 
+#   filter(county_type == 1) %>% pull(adj_mean) %>% last()
+# 
+# ## average decline non-AI monitor
+# preds_all.modelPM %>% 
+#   filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
+#   preds_all %>% 
+#   filter(county_type == 0) %>% pull(adj_mean) %>% last()
+
+## Changes over time (estimated means)
+ai_monitor_adj
+nai_monitor_adj
+
+ai_model_adj
+nai_model_adj
+
+## average decline AI monitor
+ai_monitor_adj$annual_mean_all %>% first() - ai_monitor_adj$annual_mean_all %>% last()
+
+## average decline non-AI monitor
+nai_monitor_adj$annual_mean_all %>% first() - nai_monitor_adj$annual_mean_all %>% last()
+
+## average decline AI model
+ai_model_adj$annual_mean_all %>% first() - ai_model_adj$annual_mean_all %>% last()
+
+## average decline in non-AI model
+nai_model_adj$annual_mean_all %>% first() - nai_model_adj$annual_mean_all %>% last()
 
 ```
 
