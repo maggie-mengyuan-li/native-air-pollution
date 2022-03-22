@@ -12,13 +12,14 @@ library(leaflet)
 library(rgdal)
 ```
 
-#PART 2: ASSIGN EXPOSURE/COVARIATES/OUTCOME TO COUNTIES
+# PART 2: ASSIGN EXPOSURE/COVARIATES/OUTCOME TO COUNTIES
 
 "Exposure" of interest = American Indian (AI) populated county (Y/N)
 Outcome = PM2.5 concentration (monitor), PM2.5 concentration (model), PM2.5 coverage (monitor)
 
-##2.1 Define AI Populated Counties using the 3 classification definitions
-###2.1.1 Define Rural Cluster (Wallace et al.) Counties, extract PM2.5 values for sensitivity analysis
+##  2.1 Define AI Populated Counties using the 3 classification definitions
+### 2.1.1 Define Rural Cluster (Wallace et al.) Counties, extract PM2.5 values for sensitivity analysis.
+
 ```{r}
 # Read in county data for rural clusters & extract PM2.5 data
 counties_cluster <- read.csv("Data/clustershare.csv")
@@ -41,7 +42,7 @@ native_rural_counties <- native_rural_counties %>%
 native_rural_counties
 ```
 
-###2.1.2 Define Census >5% AI Counties
+### 2.1.2 Define Census >5% AI/AN Counties
 ```{r}
 #Read in and define native counties by census definition, extract PM2.5 concentrations
 #Select native american counties using tidycensus: cutoff with census data of native americans > 5% of county population
@@ -73,8 +74,17 @@ native_census_counties <- native_census_counties %>%
   filter(!str_detect(County, "^15"))
 native_census_counties
 ```
+```{r median HH income in AI}
+native_census_hhinc <- get_decennial(geography = "county", 
+                               variables = native_pop_var, 
+                               year = 2010)
+hh_income_census = get_acs(geography = "county",
+        variables = "B19013_001",
+        year = 2010)
+```
 
-###2.1.3 Define Reservation Counties
+
+### 2.1.3 Define Tribal Entities Counties
 ```{r}
 # Read in gdb of recognized reservations 
 # Source: https://edg.epa.gov/metadata/catalog/search/resource/details.page?uuid=%7B8077CD55-74FB-4107-8047-3DEC0D55966A%7D
@@ -94,7 +104,7 @@ summary(tribal48)
 #          dsn = "/Users/maggieli/Dropbox/Native Air Pollution Paper/Paper/CodeCheck/native-air-pollution/Data/tribal48",
 #          layer = "tribal48", driver = "ESRI Shapefile")
 
-# Do some magic in QGIS: I imported the tribal48 shapefile and the county shapefile, used the overlap function to join the layers (input layer = counties), which spits out a temporary layer showing the percent overlap of reservations in each county, for each county in the attribute table (I believe the column is called overlap_pc. I went into the properties of this layer, filtered out those with overlap_pc >= 20%, and exported this as a shapefile. I then read this in below:
+# I conducted an overlap analysis in QGIS by importing the tribal48 shapefile and the county shapefile and running the overlap function to join the layers (input layer = counties), which spits out a temporary layer showing the percent overlap of reservations in each county, for each county in the attribute table (I believe the column is called overlap_pc. I went into the properties of this layer, filtered out those with overlap_pc >= 20%, and exported this as a shapefile. I then read this in below:
 
 # Read in cleaned counties with >= 20% area covered by reservation lands 
 
@@ -222,10 +232,11 @@ write_csv(covariates,
 ```
 
 
-##2.3 MAIN ANALYSIS: Define all AI/Non-AI populated counties, extract monitor/model PM2.5 concentrations & monitor coverage
+## 2.3 MAIN ANALYSIS: Define all AI/Non-AI populated counties, extract monitor/model PM2.5 concentrations & monitor coverage
 
 After defining different AI classifications above, we collect all the counties that fit in at least one of those definitions and create a master list of predominantly AI-populated counties. We use anti-join to create a list of all non-AI populated counties.
-####2.3.1 First define counties:
+
+#### 2.3.1 First define counties:
 ```{r}
 # separate AI definitions from above
 # native_rural_counties
@@ -274,7 +285,7 @@ main_analysis_counties
 ```
 
 
-####2.3.2 Function to assign monitor PM2.5 values for county
+#### 2.3.2 Function to assign monitor PM2.5 values for county
 ```{r}
 PM25_extract <- function(PM25_data, county, output_list){
   yr <- 2000
@@ -301,7 +312,7 @@ PM25_extract <- function(PM25_data, county, output_list){
 }
 ```
 
-####2.3.3 Extract monitor PM2.5 concentrations and coverage:
+#### 2.3.3 Extract monitor PM2.5 concentrations and coverage:
 ```{r}
 # Extract PM2.5 county monitor concentrations
 all_native_PM25 <- list()
@@ -316,7 +327,7 @@ all_general_PM25 <- PM25_extract(PM25_all,
 all_general_PM25
 ```
 
-####2.3.4 Extract model PM2.5 concentrations:
+#### 2.3.4 Extract model PM2.5 concentrations:
 ```{r}
 # extract values for main analysis AI counties
 model_PM25 <- do.call(rbind, model_PM25)
@@ -329,8 +340,8 @@ model_PM25
 ```
 
 
-###2.4 SENSITIVITY ANALYSIS: Assign monitor PM2.5 concentrations for different AI classifications separately
-####2.4.1 Extract monitor PM2.5 concentrations for AI=populated counties: rural cluster, census, reservation counties
+### 2.4 SENSITIVITY ANALYSIS: Assign monitor PM2.5 concentrations for different AI classifications separately
+#### 2.4.1 Extract monitor PM2.5 concentrations for AI-populated counties: rural cluster, census, reservation counties
 ```{r}
 # rural cluster
 native_PM25 <- list()
@@ -353,8 +364,8 @@ reservation_PM25 <- PM25_extract(PM25_all,
 reservation_PM25
 ```
 
-####2.4.1 Extract monitor PM2.5 concentrations for non-AI populated counties, for diff classification groups separately
-#####first, define these non-AI counties
+#### 2.4.2 Extract monitor PM2.5 concentrations for non-AI populated counties, for diff classification groups separately
+##### first, define these non-AI counties
 ```{r}
 # Define non-native counties based on reverse joining native counties with all counties
 # Find all non-native census counties (by 5% threshold), all non-native cluster counties, all reservation counties; rename columns to be the same name
@@ -376,7 +387,7 @@ general_counties_reservations <- anti_join(x = all_counties_list,
                                            by= "County")
 ```
 
-#####now, run function to extract PM2.5 concentrations for non-native counties of all 3 classification
+##### now, run function to extract PM2.5 concentrations for non-native counties of all 3 classification
 ```{r}
 #join the general counties lists with PM2.5 and PM2.5 components datasets.
 #first make a list of all 3 county data frames to do a nested for loop with

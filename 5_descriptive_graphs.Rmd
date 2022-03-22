@@ -21,9 +21,6 @@ library(gamm4)
 ### 10/22 update: plotting adjusted annual declines.
 We are plotting adjusted annual national PM2.5 averages by using our fitted LMER Model 4.
 
-### 9/25 update: plotting adjusted annual declines 
-We are plotting adjusted annual national PM2.5 averages by using our fitted LMER Model 3. The estimated values are the y-values predicted from Model 3 "offseted" by adding the model intercept (grand mean PM2.5), and effect of HH income and population density by adding the weighted average beta value for both variables.
-
 ### Monitor Data
 
 ```{r Create Dataframe of annual mean PM2.5 adjusted in all counties}
@@ -68,18 +65,9 @@ mod.all <-  gamm4(annual_mean_all ~ county_type*as.factor(year) + popd_q + hhinc
                  data = dta.all)
 summary(mod.all$gam)
 
-## OG as of pre-11/30/2020
-# pred_df =
-#    expand_grid(
-#       year = 2000:2018,
-#       county_type = c(0,1),
-#       popd_q = "(196,304]",
-#       hhinc_q = "(4.19e+04,4.39e+04]"
-#    )
-
 ## most common decile
 dta.all %>% 
-  group_by(county_type, popd_q) %>% 
+  group_by(county_type, hhinc_q) %>% 
   summarize(N = n()) %>% 
   filter(N==max(N))
 
@@ -105,36 +93,6 @@ pred_df_nonAI =
 monitor_adj <- 
   pred_df_nonAI %>% 
    modelr::add_predictions(mod.all$gam)
-
-## JUST TO TEST
-# monitor_adj = dta.all %>% 
-#   modelr::add_predictions(mod.all$gam) %>% 
-#   group_by(year, county_type) %>% 
-#   summarize(annual_mean_all = mean(pred))
-
-# ## JUST TO CHECK WITH BELOW: average decline AI monitor with most common AI decile
-# monitor_adj_AI %>% 
-#   filter(county_type == 1) %>% pull(pred) %>% first() - 
-#   monitor_adj_AI %>% 
-#   filter(county_type == 1) %>% pull(pred) %>% last()
-# 
-# ## average decline non-AI monitor
-# monitor_adj_AI %>% 
-#   filter(county_type == 0) %>% pull(pred) %>% first() - 
-#   monitor_adj_AI %>% 
-#   filter(county_type == 0) %>% pull(pred) %>% last()
-# 
-# ## JUST TO CHECK WITH ABOVE: average decline AI monitor with most common non-AI decile
-# monitor_adj_nonAI %>% 
-#   filter(county_type == 1) %>% pull(pred) %>% first() - 
-#   monitor_adj_nonAI %>% 
-#   filter(county_type == 1) %>% pull(pred) %>% last()
-# 
-# ## average decline non-AI monitor
-# monitor_adj_nonAI %>% 
-#   filter(county_type == 0) %>% pull(pred) %>% first() - 
-#   monitor_adj_nonAI %>% 
-#   filter(county_type == 0) %>% pull(pred) %>% last()
 
 ## ## edit year column to be a factor
 monitor_adj$year <- as.factor(monitor_adj$year)
@@ -221,40 +179,40 @@ native_avgdec <- native_avgdec %>% dplyr::select(year, State_Name, annual_mean_a
 
 native_exp_final
 
-# PLOT
-monitor_ai_timetrend <- ggplot() + 
-  geom_line(data = native_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name, colour= State_Name),
-            color = "grey") + #each line = state mean
-  geom_line(data=native_avgdec,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted national mean
-  geom_line(data= ai_monitor_adj,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted national mean
-  ylim(0,20) +
-  ylab(expression(paste("Annual Measured ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "AI Populated Counties",
-       x = "Year") + theme_linedraw()  +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
-monitor_ai_timetrend
-
-# customlabel inside graph
-grob_monitor_ai <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
-  gp=gpar(fontsize=30)))
-
-# Final Plot & save it
-monitor_ai_timetrend  + annotation_custom(grob_monitor_ai)
-# ggsave("figures/updated_10.22/monitor_ai_states.png")
+# # PLOT
+# monitor_ai_timetrend <- ggplot() + 
+#   geom_line(data = native_exp_final,
+#             aes(x=year, y = annual_mean_all,
+#                 group = State_Name, colour= State_Name),
+#             color = "grey") + #each line = state mean
+#   geom_line(data=native_avgdec,
+#             aes(x=year, y=annual_mean_all,
+#                 group=State_Name),
+#             color="black",
+#             size = 1.25) + #unadjusted national mean
+#   geom_line(data= ai_monitor_adj,
+#             aes(x=year, y=annual_mean_all,
+#                 group=State_Name),
+#             color = "purple",
+#             size = 1.25) + #adjusted national mean
+#   ylim(0,20) +
+#   ylab(expression(paste("Annual Measured ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
+#   labs(#title = "AI Populated Counties",
+#        x = "Year") + theme_linedraw()  +
+#   theme(plot.title = element_text(size = 18),
+#         axis.title = element_text(size = 16),
+#         axis.text = element_text(size = 12),
+#         axis.title.x=element_blank()) +
+#   guides(x =  guide_axis(angle = 45)) 
+# monitor_ai_timetrend
+# 
+# # customlabel inside graph
+# grob_monitor_ai <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
+#   gp=gpar(fontsize=30)))
+# 
+# # Final Plot & save it
+# monitor_ai_timetrend  + annotation_custom(grob_monitor_ai)
+# ggsave("figures/descrip_graphs/monitor_ai_states.png")
 ```
 
 ```{r Get unadjusted mean PM2.5 for non-AI counties & Plot all adj and unadj values}
@@ -315,46 +273,11 @@ nonnative_avgdec$State_Name <- "Average Concentration across all States (Unadjus
 nonnative_avgdec$county_type <- "Non-American Indian"
 nonnative_avgdec <- nonnative_avgdec %>% dplyr::select(year, State_Name, annual_mean_all, movave, county_type)
 nonnative_avgdec
-
-monitor_nai_timetrend <- ggplot() + 
-  geom_line(data = nonnative_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name),
-            color = "grey") + #unadjusted means by state
-  geom_line(data=nonnative_avgdec,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted national mean
-  geom_line(data= nai_monitor_adj,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted national mean
-  ylim(0, 20) +
-  ylab(expression(paste("Annual Measured ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "Non-AI Populated Counties",
-       x = "Year") + theme_linedraw() +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
-monitor_nai_timetrend 
-
-# 9/7 for paper
-# customlabel inside graph
-grob_nai_monitor <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,gp=gpar(fontsize=30)))
-
-# Plot & save
-monitor_nai_timetrend + annotation_custom(grob_nai_monitor)
-# ggsave("figures/updated_10.22/monitor_nai_states.png")
-
 ```
 
-#### Attempt to combine AI and non-AI in one graph!
+#### Combine AI and non-AI measured PM2.5 trends over time in one graph
 
-```{r combined graph}
+```{r Combined graph of all states and nationwide avg and Model 4 predictions}
 ## AI lines = teal
 ## Non-AI lines = beige
 
@@ -404,94 +327,17 @@ grob_monitor_combined <- grobTree(textGrob(expression(paste("Measured ", PM[2.5]
 grob_monitor_data = grobTree(textGrob("Data Source: EPA-AQS and IMPROVE monitors", x=0.05,  y=0.1, hjust=0,gp=gpar(fontsize=14)))
 
 # Plot & save
-# monitor_combined
-# ggsave("figures/updated_12.7/monitor_combined_notitle.png")
-# 
-# 
-# monitor_combined + annotation_custom(grob_monitor_combined)
-# ggsave("figures/updated_12.7/monitor_combined.png")
-
-# monitor_combined + annotation_custom(grob_monitor_data)
-# ggsave("figures/updated_12.7/monitor_combined_datasource.png")
-# ggsave("presentations/layering_trends/monitor_full.png") # for presentation
+monitor_combined
+ggsave("figures/descrip_graphs/monitor_combined_notitle.png")
 
 
-## combined df plot: still a WIP
+monitor_combined + annotation_custom(grob_monitor_combined)
+ggsave("figures/descrip_graphs/monitor_combined.png")
 
-# ggplot(combined_monitor_df, aes(x=year, y = annual_mean_all, group=State_Name)) + 
-#   geom_line(aes(color = State_Name)) +
-#     scale_x_continuous(name="Brightness", breaks=seq(0,8,1)) +
-#     scale_y_continuous(name="Count", breaks=seq(0,12,1)) + 
-#     ggtitle("Combine plot of BV cumulative counts")+
-#     theme_bw()
-```
-
-```{r Layered graphs for seminar presentation 2/1/2021}
-# ALL STATE LINES ONLY
-monitor_statesonly <- ggplot() + 
-  geom_line(data = native_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name, colour= State_Name),
-            color = "#c7eae5") + #each line = state mean
-  geom_line(data = nonnative_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name),
-            color = "#f6e8c3") + #unadjusted means by state
-  ylim(0, 20) +
-  ylab(expression(paste("Annual Mean ", PM[2.5], " (", mu, "g/", m^3, ")"))) + #dont need to specify model/measured, gonna do so w/ grob
-  labs(x = "Year") + theme_linedraw() +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) +
-  geom_hline(yintercept=12, linetype="solid", color = "red")
-monitor_statesonly
-
-# add caption/title (data source)
-monitor_statesonly + annotation_custom(grob_monitor_data)
-ggsave("presentations/layering_trends/monitor_only_states.png")
-
-# UNADJUSTED NATIONAL MEANS WITH ALL STATES
-monitor_unadj <- ggplot() + 
-  geom_line(data = native_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name, colour= State_Name),
-            color = "#c7eae5") + #each line = state mean
-  geom_line(data = nonnative_exp_final,
-            aes(x=year, y = annual_mean_all,
-                group = State_Name),
-            color = "#f6e8c3") + #unadjusted means by state
-  geom_line(data=native_avgdec,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color="#5ab4ac", linetype = "dashed",
-            size = 1.25) + #unadjusted national mean (dashed)
-  geom_line(data=nonnative_avgdec,
-            aes(x=year, y=annual_mean_all,
-                group=State_Name),
-            color="#d8b365", linetype = "dashed",
-            size = 1.25) + #unadjusted national mean
-  ylim(0, 20) +
-  ylab(expression(paste("Annual Mean ", PM[2.5], " (", mu, "g/", m^3, ")"))) + #dont need to specify model/measured, gonna do so w/ grob
-  labs(x = "Year") + theme_linedraw() +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) +
-  geom_hline(yintercept=12, linetype="solid", color = "red")
-monitor_unadj
-
-# add caption/title (data source)
-monitor_unadj + annotation_custom(grob_monitor_data)
-ggsave("presentations/layering_trends/monitor_unadj.png")
-
-# FULL GRAPH WITH ALL THE LINES
 monitor_combined + annotation_custom(grob_monitor_data)
-ggsave("presentations/layering_trends/monitor_full.png") 
-```
+ggsave("figures/descrip_graphs/monitor_combined_datasource.png")
 
+```
 
 ### Model Data
 ```{r Create Dataframe of annual mean PM2.5 adjusted in all counties}
@@ -668,43 +514,6 @@ native_avgdec_model$county_type <- "American Indian"
 native_avgdec_model <- native_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
 # make list with both df
 dplyr::bind_rows(native_modelpm_final,native_avgdec_model)
-
-# PLOT
-
-model_ai_timetrend <- ggplot() + 
-  geom_line(data = native_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name, colour= State_Name),
-            color = "grey") + #each line = state mean
-  geom_line(data=native_avgdec_model,
-            aes(x=Year, y=PM25,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted line
-  geom_line(data= ai_model_adj,
-            aes(x=Year, y=annual_mean_all,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted line
-  ylim(0,20) +
-  ylab(expression(paste("Annual Modeled ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "AI Populated Counties",
-       x = "Year") + theme_linedraw()  +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
-model_ai_timetrend 
-
-# customlabel inside graph
-grob_model_ai <- grobTree(textGrob("C", x=0.05,  y=0.9, hjust=0,
-  gp=gpar(fontsize=30)))
-
-# Final Plot
-model_ai_timetrend + annotation_custom(grob_model_ai)
-# ggsave("figures/updated_10.22/model_ai_states.png")
-
 ```
 
 ```{r Get unadjusted mean PM2.5 for non-AI counties & Plot all adj and unadj values}
@@ -764,50 +573,12 @@ nonnative_avgdec_model[2,"movave"] <- mean(c(nonnative_avgdec_model$PM25[1],
 nonnative_avgdec_model$State_Name <- "Average Concentration across all States"
 nonnative_avgdec_model$county_type <- "Non-AI"
 nonnative_avgdec_model <- nonnative_avgdec_model %>% dplyr::select(Year, State_Name, PM25, movave, county_type)
-
-
-# PLOT
-
-model_nai_timetrend <- ggplot() + 
-  geom_line(data = nonnative_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name, colour= State_Name),
-            color = "grey") + #each line = state mean
-  geom_line(data=nonnative_avgdec_model,
-            aes(x=Year, y=PM25,
-                group=State_Name),
-            color="black",
-            size = 1.25) + #unadjusted line
-  geom_line(data= nai_model_adj,
-            aes(x=Year, y=annual_mean_all,
-                group=State_Name),
-            color = "purple",
-            size = 1.25) + #adjusted line
-  ylim(0,20) +
-  ylab(expression(paste("Annual Modeled ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
-  labs(#title = "Non-AI Populated Counties",
-       x = "Year") + theme_linedraw()  +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) 
-model_nai_timetrend 
-
-# customlabel inside graph
-grob_model_nai <- grobTree(textGrob("D", x=0.05,  y=0.9, hjust=0,
-  gp=gpar(fontsize=30)))
-
-# Final Plot
-model_nai_timetrend + annotation_custom(grob_model_nai)
-# ggsave("figures/updated_10.22/model_nai_states.png")
-
 ```
 
-#### Attempt to combine them in one graph
+#### Combine AI and non-AI modeled PM2.5 trends over time in one graph
 
-```{r}
-## AI lines = turquoise?
+```{r Combined graph of all states and nationwide avg and Model 4 predictions}
+## AI lines = turquoise
 ## Non-AI lines = beige
 
 model_combined <- ggplot() +
@@ -857,139 +628,9 @@ grob_model_data = grobTree(textGrob("Data Source: van Donkelaar et al. model", x
 
 # Plot & save
 model_combined + annotation_custom(grob_model_combined)
-ggsave("figures/updated_12.7/model_combined.png")
+ggsave("figures/descrip_graphs/model_combined.png")
 
 model_combined + annotation_custom(grob_model_data)
-ggsave("figures/updated_12.7/model_combined_datasource.png")
+ggsave("figures/descrip_graphs/model_combined_datasource.png")
 
 ```
-
-```{r Layered graphs for seminar presentation 2/1/2021}
-# ALL STATE LINES ONLY
-model_statesonly <- ggplot() +
-  geom_line(data = native_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name, colour= State_Name),
-            color = "#c7eae5") + #each line = state mean
-  geom_line(data = nonnative_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name),
-            color = "#f6e8c3") + #unadjusted means by state
-  ylim(0, 20) +
-  ylab(expression(paste("Annual Mean ", PM[2.5], " (", mu, "g/", m^3, ")"))) +
-  labs(x = "Year") + theme_linedraw() +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) +
-  geom_hline(yintercept=12, linetype="solid", color = "red")
-model_statesonly
-
-# add caption/title (data source)
-model_statesonly + annotation_custom(grob_model_data)
-ggsave("presentations/layering_trends/model_only_states.png")
-
-# UNADJUSTED NATIONAL MEANS WITH ALL STATES
-model_unadj <- ggplot() +
-  geom_line(data = native_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name, colour= State_Name),
-            color = "#c7eae5") + #each line = state mean
-  geom_line(data = nonnative_modelpm_final,
-            aes(x=Year, y = PM25,
-                group = State_Name),
-            color = "#f6e8c3") + #unadjusted means by state
-  geom_line(data=native_avgdec_model,
-            aes(x=Year, y=PM25,
-                group=State_Name),
-            color="#5ab4ac", linetype = "dashed",
-            size = 1.25) + #unadjusted national mean (dashed)
-  geom_line(data=nonnative_avgdec_model,
-            aes(x=Year, y=PM25,
-                group=State_Name),
-            color="#d8b365", linetype = "dashed",
-            size = 1.25) + #unadjusted national mean
-  ylim(0, 20) +
-  ylab(expression(paste("Annual Mean ", PM[2.5], " (", mu, "g/", m^3, ")"))) + 
-  labs(x = "Year") + theme_linedraw() +
-  theme(plot.title = element_text(size = 18),
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size = 12),
-        axis.title.x=element_blank()) +
-  guides(x =  guide_axis(angle = 45)) +
-  geom_hline(yintercept=12, linetype="solid", color = "red")
-model_unadj
-
-# add caption/title (data source)
-model_unadj + annotation_custom(grob_model_data)
-ggsave("presentations/layering_trends/model_unadj.png")
-
-# FULL GRAPH WITH ALL THE LINES
-model_combined + annotation_custom(grob_model_data)
-ggsave("presentations/layering_trends/model_full.png") 
-```
-
-### Calulate average decline across study period (monitor and model) -- NOT VALID, SEE THE CODE CHUNKS ABOVE FOR EXACT ESTIMATES
-
-```{r}
-
-## MONITOR: predict without ref group (og data); data not presented in manuscript after consulting with J Goldsmith
-# preds_all <- dta.all %>% 
-#   modelr::add_predictions(mod.all$gam) %>% 
-#   group_by(year, county_type) %>% 
-#   summarize(adj_mean = mean(pred))
-# 
-# ## average decline AI monitor with most common non-AI decile
-# preds_all %>% 
-#   filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
-#   preds_all %>% 
-#   filter(county_type == 1) %>% pull(adj_mean) %>% last()
-# 
-# ## average decline non-AI monitor
-# preds_all %>% 
-#   filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
-#   preds_all %>% 
-#   filter(county_type == 0) %>% pull(adj_mean) %>% last()
-# 
-# ## MODEL: predict without ref group (og data), add two chunks output below to main text
-# 
-# preds_all.modelPM <- dta.all.modelPM %>% 
-#   modelr::add_predictions(mod.all.modelPM$gam) %>% 
-#   group_by(Year, county_type) %>% 
-#   summarize(adj_mean = mean(pred))
-# 
-# ## average decline AI monitor
-# preds_all.modelPM %>% 
-#   filter(county_type == 1) %>% pull(adj_mean) %>% first() - 
-#   preds_all %>% 
-#   filter(county_type == 1) %>% pull(adj_mean) %>% last()
-# 
-# ## average decline non-AI monitor
-# preds_all.modelPM %>% 
-#   filter(county_type == 0) %>% pull(adj_mean) %>% first() - 
-#   preds_all %>% 
-#   filter(county_type == 0) %>% pull(adj_mean) %>% last()
-
-## Changes over time (estimated means)
-ai_monitor_adj
-nai_monitor_adj
-
-ai_model_adj
-nai_model_adj
-
-## average decline AI monitor
-ai_monitor_adj$annual_mean_all %>% first() - ai_monitor_adj$annual_mean_all %>% last()
-
-## average decline non-AI monitor
-nai_monitor_adj$annual_mean_all %>% first() - nai_monitor_adj$annual_mean_all %>% last()
-
-## average decline AI model
-ai_model_adj$annual_mean_all %>% first() - ai_model_adj$annual_mean_all %>% last()
-
-## average decline in non-AI model
-nai_model_adj$annual_mean_all %>% first() - nai_model_adj$annual_mean_all %>% last()
-
-```
-
-

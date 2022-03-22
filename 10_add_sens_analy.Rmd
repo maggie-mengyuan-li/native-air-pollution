@@ -1,5 +1,5 @@
 ---
-title: 'Additional sensitivity analyses: RUCA, Intersection of AI definitions'
+title: 'Additional sensitivity analyses: NOAA Climate Region, RUCA, Intersection of AI definitions'
 author: "Maggie Li (ml4424)"
 date: "8/12/2021"
 output: html_document
@@ -7,8 +7,10 @@ output: html_document
 
 ```{r}
 library(tidyverse)
+library(sf)
 ```
 
+See code below for additional plots included in the supplement.
 
 ## Plot Model 4 InterX additionally adj for NOAA climate region, only modeled PM2.5
 ```{r}
@@ -86,13 +88,11 @@ grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
 
 # Plot and save
 model_climate_interx_plot + annotation_custom(grob)
-ggsave("figures/updated_12.7/model_interx_climate.png")
-
-# save without grob
-model_climate_interx_plot
-ggsave("presentations/layering_trends/model_interx_climate.png")
+ggsave("figures/supplement/model_interx_climate.png")
 
 ```
+
+# Comparing NCHS and RUCA Rural Counties
 
 ## Plot NCHS Rural Counties
 
@@ -173,7 +173,7 @@ browsable(
                }",
             ".leaflet .legend i{
               width: 15px;
-              height: 15px;
+              height: 15px;s
                }"
           )
        ),
@@ -204,6 +204,7 @@ ruca = ruca %>%
   rename(County = state_county_fips_code)
 ruca
 ```
+
 ### Plot RUCA Rural counties
 
 ```{r}
@@ -532,8 +533,7 @@ grob <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
 
 # Plot and save
 ruca_monitor_interx_plot + annotation_custom(grob)
-ggsave("figures/updated_12.7/ruca_monitor_interx_plot.png")
-
+ggsave("figures/supplement/ruca_monitor_interx_plot.png")
 
 ```
 
@@ -603,14 +603,14 @@ grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
 
 # Plot and save
 ruca_model_interx_plot + annotation_custom(grob)
-ggsave("figures/updated_12.7/ruca_model_interx_plot.png")
+ggsave("figures/supplement/ruca_model_interx_plot.png")
 
 ```
 
 
 ## Intersection of all three classifications--Main effects analysis only (no interX)
 ```{r}
-all_overlap_vctr = all_overlap %>% pull(County)
+all_overlap_vctr = all_overlap %>% pull(GEOID)
 ai_intersect = model_lmer %>% 
   mutate(county_type_intsct = case_when(
     County %in% all_overlap_vctr ~ 1,
@@ -785,7 +785,7 @@ model_interx_plot
 
 # Plot and save
 # model_interx_plot + annotation_custom(grob)
-ggsave("figures/updated_12.7/model_interx_no_covariates.png")
+ggsave("figures/supplement/model_interx_no_covariates.png")
 
 ```
 
@@ -912,7 +912,7 @@ grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
 
 # save without grob
 model_adi_interx_plot
-ggsave("presentations/layering_trends/model_adi_interx.png")
+ggsave("figures/supplement/model_adi_interx.png")
 ```
 
 ### Run Model 4 with Main Analysis Counties also including counties with any overlap with fed rec tribal entity (run 8_supplement.Rmd first)

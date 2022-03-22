@@ -6,6 +6,9 @@ output: html_document
 ---
 
 ## 3.1 Descriptive statistics & bar graph for monitor coverage in native/non-native counties (by different classifications)
+
+Note: Monitor coverage (Section 3.1) is not included in the present edition of our paper, but you can take a look to see how monitor coverage differs between AI- and non-AI-populated counties. 
+
 ### 3.1.1 Define fxn to calculate average # monitors per year for each county by county type, frequency plots of monitor distributions
 
 ```{r}
@@ -107,7 +110,7 @@ ggplot(all_PM25_tbl, aes(x=lvl_bins, y = total_prop, fill=county_type)) +
 ggsave("figures/updated_10.22/recolored_monitors.png")
 ```
 
-#### 3.1.2.1 MAIN ANALYSIS: Chi-Squared test to compare monitor distributions (not doing this)
+#### 3.1.2.1 Chi-Squared test to compare monitor distributions
 ```{r}
 # Run just part of the above function to get table of all unique avg_mon values for AI and non-AI populated counties, and then use table function to make contingency table
 # native_PM25_monitors
@@ -242,13 +245,13 @@ reservation_PM25_plot
 reservation_PM25_tbl
 ```
 
-##3.2 Clean monitor data further to extract mean PM2.5 concentrations per county across all years, PM2.5 concentrations per county per EACH year, mean monitor count per county across all years, and monitor count per county per EACH year.
+## 3.2 Clean monitor data further to extract mean PM2.5 concentrations per county across all years, PM2.5 concentrations per county per EACH year, mean monitor count per county across all years, and monitor count per county per EACH year.
 
-Next off, we need to clean the data further to have estimates for our Table 1, PM2.5 concentration graphs by State over time, and statistical regression models. 
+Next off, we need to clean the data further to have estimates for our Table 1, descriptive PM2.5 trends by county and state over time, and statistical regression models. 
 
-###3.2.1 Compute Monitor Concentrations (averaged across all years and each annual average, per county)
+### 3.2.1 Compute Monitor Concentrations (averaged across all years and each annual average, per county)
 
-####3.2.1.1 Define functions
+#### 3.2.1.1 Define functions
 
 I first define a function (drop_all_NA) that averages PM2.5 concentrations for each county across all available study years with monitors, and drops counties with NO MONITORS across all years from the AI/non-AI county dfs. The second function (combine_avg_exp) combines the two AI/non-AI county dfs into one df and gets the average PM2.5 concentration based on available monitor estimates; the native_status input is a binary indicator variable (1 = AI, 0 = non-AI) so you know which counties are which when all the counties are combined in a single df. When I run it, it's a function within a function (see below). The final output df is a table with each row entry being a county, and the average PM2.5 concentration across all study years.
 

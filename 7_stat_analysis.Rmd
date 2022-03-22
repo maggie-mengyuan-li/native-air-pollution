@@ -14,8 +14,6 @@ library(grid)
 library(ggplot2)
 ```
 
-### 8/13/2021 update: corrected confidence intervals to 1.96*std_err in graphs
-
 ## Linear Mixed Effects Model for Outcome = Monitor and Model PM2.5 concentrations
 
 ### Define lmer function
@@ -24,8 +22,7 @@ I am defining functions to run the following linear mixed regressions on the dat
 -Model 2: Partial (further adjusted for population density)
 -Model 3: Full (further adjusted for both pop density and HH income)
 
-I also run Model 3 to test for an interaction effect between AI/Non-AI classification and year.
--Model 3X: Full model with interaction term for county_type*year
+I also run Model 4 to test for potential effect modification of AI/Non-AI county type classification by categorical year, i.e., including an interaction term for county_type*year.
 
 
 ```{r}
@@ -152,13 +149,13 @@ summary(detrend_lmer_crude(rural_monitors))
 stargazer(detrend_lmer_crude(rural_monitors),ci=T)
 ```
 
-#### Plot time-varying effect of AI/Non-AI county type binary variable (county_type interaction effect with year)
+#### Plot time-varying effect of AI/Non-AI county type binary variable (county_type x year interaction term)
 
 
 Creating Variance-Covariance Matrices, Plotting model PM2.5 declines over time
 
 I first create a variance-covariance matrix to pull out all of the variances for all of the study years after 2000:
-var(x+y) = var(x) + var(y) + 2*covar(x,y) where x = main effect of native county type on PM2.5 concnetrations in 2000 (referent), y = main effect of native county type due to interaction with time in study years 2001-2018
+var(x+y) = var(x) + var(y) + 2*covar(x,y) where x = main effect of native county type on PM2.5 concentrations in 2000 (referent), y = main effect of native county type due to interaction with time in study years 2001-2018
 
 Then I create a new data frame, pm_decline_monitor_all, which saves all of the total effect estimates (main effect + interaction effect) and their 95% confidence intervals. I use a loop to iterate through all the study years to fill in this table. Then I can graph this!
 
@@ -240,11 +237,11 @@ grob_monitor <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
 
 # Plot and save
 monitor_interx_grob = monitor_interx_plot + annotation_custom(grob_monitor)
-ggsave("figures/updated_12.7/monitor_interx.pdf", width = 6, height = 4, dpi = 300)
+ggsave("figures/interx_plot/monitor_interx.pdf", width = 6, height = 4, dpi = 300)
 
 
 monitor_interx_plot
-ggsave("presentations/layering_trends/monitor_interx.pdf", width = 6, height = 4, dpi = 300)
+ggsave("figures/interx_plot/monitor_interx.pdf", width = 6, height = 4, dpi = 300)
 ```
 
 ##### Rural Main Analysis Counties (Sensitivity Analysis)
@@ -318,7 +315,7 @@ grob <- grobTree(textGrob("B", x=0.05,  y=0.9, hjust=0,
 
 # Plot and save
 monitor_interx_rural + annotation_custom(grob)
-ggsave("figures/updated_12.7/monitor_rural_interx.png", width = 6, height = 4, dpi = 300)
+ggsave("figures/interx_plot/monitor_rural_interx.png", width = 6, height = 4, dpi = 300)
 ```
 
 ### Model Data: Run regressions for main analysis (all counties) and sensitivity analysis (rural counties)
@@ -512,29 +509,21 @@ grob <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
 
 # Plot and save
 model_interx_grob = model_interx_plot + annotation_custom(grob)
-ggsave("figures/updated_12.7/model_interx.pdf", width = 6, height = 4, dpi = 300)
+ggsave("figures/interx_plot/model_interx.pdf", width = 6, height = 4, dpi = 300)
 
 # save without grob
 model_interx_plot
-ggsave("presentations/layering_trends/model_interx.pdf", width = 6, height = 4)
+ggsave("figures/interx_plot/model_interx.pdf", width = 6, height = 4)
 
 library(ggpubr)
 ggarrange(model_interx_grob, monitor_interx_grob)
-ggsave("figures/updated_12.7/model_monitor_interx.pdf", width = 12, height = 4, dpi = 300)
+ggsave("figures/interx_plot/model_monitor_interx.pdf", width = 12, height = 4, dpi = 300)
 # 
 # # save without grob for F31 prelim data
 # model_interx_plot
-# ggsave("presentations/layering_trends/model_interx.png")
+# ggsave("figures/interx_plot/model_interx.png")
 ```
-```{r}
-# Generate a list of the aligned plot objects (measured and modeled pm2.5)
-# library(cowplot)
-# pl <- align_plots(monitor_interx_plot, model_interx_plot, align="v")
-# p1
-# ggdraw(pl[[1]])
-# monitor_interx_plot
-# model_interx_plot
-```
+
 
 ##### Rural Main Analysis Counties only
 ```{r}
@@ -607,11 +596,12 @@ grob <- grobTree(textGrob("A", x=0.05,  y=0.9, hjust=0,
 
 # Plot and save
 model_interx_rural + annotation_custom(grob)
-ggsave("figures/updated_12.7/model_rural_interx.png", width = 6, height = 4, dpi = 300)
+ggsave("figures/interx_plot/model_rural_interx.png", width = 6, height = 4, dpi = 300)
 ```
 
 
 ## Read out intermediate data files
+
 ```{r}
 write_csv(all_ctyear_exp, "intermediate/monitor_ctyear.csv")
 write_csv(rural_monitors, "intermediate/monitor_rural_ctyear.csv")

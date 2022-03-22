@@ -16,13 +16,13 @@ library(tidyverse)
 library(raster)
 ```
 
-#PART 1: DATA CLEANING (MONITOR & MODEL)
-##1.1 Monitor Data
-###Read in and clean EPA 
+# PART 1: DATA CLEANING (MONITOR & MODEL DATA)
+## 1.1 Monitor Data
+### Read in and clean EPA 
 
-I downloaded these here: https://aqs.epa.gov/aqsweb/airdata/download_files.html
+Monitor data downloaded  here: https://aqs.epa.gov/aqsweb/airdata/download_files.html
 
-I've included them in the data folder as csv files since they were a bit of a hassle to clean from their OG .txt file format, but you can try to download them from the source and check!
+I've included them in the data folder as csv files, converted from their original .txt file format.
 
 ```{r}
 annual_conc_by_monitor_1999 <- read.csv("Data/EPA_data_1999_2018/annual_conc_by_monitor_1999.csv")
@@ -47,8 +47,8 @@ annual_conc_by_monitor_2017 <- read.csv("Data/EPA_data_1999_2018/annual_conc_by_
 annual_conc_by_monitor_2018 <- read.csv("Data/EPA_data_1999_2018/annual_conc_by_monitor_2018.csv")
 ```
 
-###Filter out EPA PM2.5 Annual Data
-####Make list of all tables to iterate through
+### Filter out EPA PM2.5 Annual Data
+#### Make list of all tables to iterate through
 
 ```{r}
 all_epa_tables <-list(annual_conc_by_monitor_2000,
@@ -85,7 +85,7 @@ for (i in 1:length(all_epa_tables)){
 cleaned_list[[1]]
 ```
 
-####For loop to iterate through all the tables; POC = 1, at least 75% observations for that year, and select for no events or events excluded monitors (at least for now)
+#### For loop to iterate through all the tables; POC = 1, at least 75% observations for that year, and select for no events or events excluded monitors.
 ```{r}
 
 for (year in 1:19){
@@ -109,10 +109,11 @@ for (year in 1:19){
 }
 ```
 
-###Read in & clean IMPROVE rural network data
+### Read in & clean IMPROVE rural network data
 
-IMPROVE Monitoring Network data downloaded from here: http://views.cira.colostate.edu/fed/QueryWizard/Default.aspx 
-I selected EPA PM2.5 MASS FRM (88101) Daily, 2000-2018, and clipped it (PM2_5_1999_2018_rural_clipped.txt). I forgot to download the data the first time with geolocation information so the second imported dataset (IMPROVE_location_tbl) has the lat/lon coordinates, which I joined to the first dataset.
+IMPROVE Monitoring Network data downloaded from here: http://views.cira.colostate.edu/fed/QueryWizard/Default.aspx  
+
+I selected EPA PM2.5 MASS FRM (88101) Daily, 2000-2018, and clipped it (PM2_5_1999_2018_rural_clipped.txt). I forgot to download the data the first time with geolocation information so the second imported dataset (IMPROVE_location_tbl) has the lat/lon coordinates, which I then joined to the first dataset.
 
 ```{r}
 PM2_5_1999_2018_rural_clipped<-read.csv("Data/PM2_5_1999_2018_rural_clipped.txt", sep="")
@@ -236,7 +237,7 @@ PM25_rural_locations <- PM25_rural_locations %>% filter(Year != "1999") %>%
 
 ```
 
-###Monitor PM2.5 table for all years 1999-2018 (join EPA + IMPROVE)
+### Monitor PM2.5 table for all years 1999-2018 (join EPA + IMPROVE)
 
 ```{r}
 #Make a list to store IMPROVE tables by year
@@ -275,12 +276,14 @@ for (year in 1:19){
 PM25_all
 ```
 
-##1.2 Model data
-###*Optional* Reading in model data from source as raster, extracting values at the county level for all US counties 
+## 1.2 Model data
+### *Optional* Reading in model data from source as raster, extracting values at the county level for all US counties 
 
-This is the part that takes forever to run, you can download all the years' ncdf files from the website and read them in via a loop or one by one (takes about 1-2 hours to run each), and extract county level model PM2.5 using code in this chunk. Tt's commented out because you can skip this and just directly import csv files I've provided, which are the outputs from this.
+Data are downloaded from a satellite-based surface PM2.5 model: https://sites.wustl.edu/acag/datasets/surface-pm2-5/
 
-I've put one ncdf downloaded from the source for 2008 if you want to try running the code, and see if it matches up with my csv file!
+Extracting county-level average total PM2.5 is quite time intensive. You can download all the years' ncdf files from the website and read them in via a loop or one by one (takes about 1-2 hours to run each), and extract county level model PM2.5 using code in this chunk. It's commented out because you can skip this and just directly import csv files I've provided, which are the outputs from this.
+
+I've included code to import one ncdf file of annual 2008 PM2.5 values and extract county-level averages.
 
 ```{r}
 # Source: Randall Martin's PM2.5 Model http://fizz.phys.dal.ca/~atmos/martin/?page_id=140
@@ -350,7 +353,10 @@ I've put one ncdf downloaded from the source for 2008 if you want to try running
 # model_PM25_2008_counties
 ```
 
-###Read in county model PM2.5 data
+### Read in county model PM2.5 data
+
+Here is the code to read in county-level modeled PM2.5 concentrations.
+
 ```{r}
 # Read in model data into list of length 19 (# study years)
 model_PM25 <- list()
